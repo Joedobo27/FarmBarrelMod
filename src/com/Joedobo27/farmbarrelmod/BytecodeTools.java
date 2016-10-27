@@ -302,7 +302,7 @@ class BytecodeTools {
         return new byte[0];
     }
 
-    public static int byteArrayToInt(byte[] b, int byteLength) {
+    private static int byteArrayToInt(byte[] b, int byteLength) {
         switch (byteLength) {
 
             case 2:
@@ -408,6 +408,7 @@ class BytecodeTools {
         return toReturn;
     }
 
+    @SuppressWarnings("WeakerAccess")
     public static void byteCodePrint(String destinationPath, CodeIterator codeIterator) throws FileNotFoundException, BadBytecode {
         Path printPath = Paths.get(destinationPath);
         PrintWriter out = new PrintWriter(printPath.toFile());
