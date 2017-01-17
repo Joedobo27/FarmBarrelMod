@@ -111,4 +111,5 @@ class Wrap {
     static int getTemplateWeightFromItem(Item item){
         return item.getTemplate().getWeightGrams();
     }
+
 }

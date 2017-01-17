@@ -447,6 +447,52 @@ class BytecodeTools {
         logger.log(Level.INFO,name + " : " + Arrays.toString(a));
     }
 
+    /**
+     * Encode the value for arg "integer" into the appropriate byteCode opCode + operand  for the java-int. Add the
+     * encoded information to the byte code object "bytecode".
+     *
+     * @param bytecode JA bytecode object.
+     * @param integer int value.
+     */
+    static void putInteger(Bytecode bytecode, int integer, ConstPool constPool) {
+        switch (integer) {
+            case -1:
+                bytecode.add(Opcode.ICONST_M1);
+                break;
+            case 0:
+                bytecode.add(Opcode.ICONST_0);
+                break;
+            case 1:
+                bytecode.add(Opcode.ICONST_1);
+                break;
+            case 2:
+                bytecode.add(Opcode.ICONST_2);
+                break;
+            case 3:
+                bytecode.add(Opcode.ICONST_3);
+                break;
+            case 4:
+                bytecode.add(Opcode.ICONST_4);
+                break;
+            case 5:
+                bytecode.add(Opcode.ICONST_5);
+                break;
+            default:
+                if (integer >= Byte.MIN_VALUE && integer <= Byte.MAX_VALUE) {
+                    bytecode.add(Opcode.BIPUSH);
+                    // integer bound to byte size.
+                    bytecode.add(integer);
+                } else if (integer >= Short.MIN_VALUE && integer <= Short.MAX_VALUE) {
+                    bytecode.add(Opcode.SIPUSH);
+                    // Since byte code requires byte sized blocks, break up integer with bitmask and shift.
+                    bytecode.add((integer & 0xff00) >>> 8, integer & 0x00ff);
+                } else {
+                    // Appends LDC or LDC_W depending on constant pool size.
+                    bytecode.addLdc(constPool.addIntegerInfo(integer));
+                }
+        }
+    }
+
     private static class CIStack {
         private LinkedList<Integer> stack;
         private LinkedList<Integer> listPositions;

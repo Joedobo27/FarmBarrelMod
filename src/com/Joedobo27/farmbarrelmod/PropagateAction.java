@@ -16,13 +16,14 @@ import com.wurmonline.server.skills.Skill;
 import com.wurmonline.server.skills.SkillList;
 import com.wurmonline.server.zones.CropTilePoller;
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
-import org.gotti.wurmunlimited.modloader.interfaces.WurmServerMod;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -31,7 +32,7 @@ import java.util.stream.IntStream;
 
 import static com.Joedobo27.farmbarrelmod.Wrap.Actions.*;
 
-class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, ActionPerformer {
+class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
     private final short actionId;
@@ -46,7 +47,7 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item source, int tileX, int tileY, boolean onSurface, int encodedTile){
-        if (performer instanceof Player && source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelId()){
+        if (performer instanceof Player && source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()){
             //noinspection ArraysAsListWithZeroOrOneArgument
             return Arrays.asList(actionEntry);
         }else {
@@ -61,148 +62,188 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
 
     @Override
     public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface, int heightOffset, int encodedTile, short actionId, float counter) {
-        if (actionId == getActionId() && source.getTemplateId() == FarmBarrelMod.getSowBarrelId()) {
+        if (actionId == getActionId() && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
             try {
                 int time;
-                SowBarrelData sowBarrelData = new SowBarrelData(performer, source);
+                final float TIME_TO_COUNTER_DIVISOR = 10.0f;
+                final float ACTION_START_TIME = 1.0f;
                 SowActionData sowActionData;
-                float ACTION_START_TIME = 1.0f;
+
                 if (counter == ACTION_START_TIME) {
-                    sowActionData = new SowActionData(new Point(tileX, tileY), sowBarrelData.getSowBarrelRadius(), action,
-                            onSurface, sowBarrelData);
+                    sowActionData = new SowActionData(new Point(tileX, tileY), action, onSurface, performer, source, encodedTile);
                     setSowActionDataReflect(sowActionData);
-                    if (!checkRequirements(sowBarrelData, sowActionData)) {
+                    if (!checkRequirements(sowActionData)) {
                         return true;
                     }
                     performer.getCommunicator().sendNormalServerMessage("You start " + action.getActionEntry().getVerbString() + ".");
                     Server.getInstance().broadCastAction(performer.getName() + " starts to " + action.getActionString() + ".", performer, 5);
-
-                    time = getInitialActionTime(sowBarrelData, action, sowActionData);
-                    performer.getCurrentAction().setTimeLeft(time);
-                    performer.sendActionControl(action.getActionEntry().getVerbString(), true, time);
+                    action.setTimeLeft(sowActionData.totalTime);
+                    performer.sendActionControl(action.getActionEntry().getVerbString(), true, sowActionData.totalTime);
                 } else {
                     time = action.getTimeLeft();
                     sowActionData = getSowActionDataReflect(action);
-                    boolean isEndOfTileSowing = action.justTickedSecond() && action.currentSecond() % sowActionData.getSowTileCount() == 0;
+                    boolean isEndOfTileSowing = action.justTickedSecond() &&
+                            (int)counter % (int)(sowActionData.unitSowTimeInterval / TIME_TO_COUNTER_DIVISOR) == 0;
                     if (isEndOfTileSowing) {
-                        int cropId = getCropIdReflection(sowBarrelData.seed.getRealTemplateId());
+                        int cropId = getCropIdReflection(sowActionData.seed.getRealTemplateId());
                         double cropDifficulty = getCropDifficultyReflection(cropId);
 
                         // skill check and use the unit time in sowActionData as counts
-                        Skill farmingSkill = sowBarrelData.performer.getSkills().getSkillOrLearn(SkillList.FARMING);
-                        double bonus = Math.max(10, sowBarrelData.performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
-                        float actionTimeToCounterConvert = 10.0f;
-                        farmingSkill.skillCheck(cropDifficulty, bonus, false, sowActionData.unitSowTimeInterval / actionTimeToCounterConvert);
-                        // consume some seed volume in barrel
-                        sowBarrelData.consumeSeed();
+                        Skill farmingSkill = performer.getSkills().getSkillOrLearn(SkillList.FARMING);
+                        double bonus = Math.max(10, performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
+                        farmingSkill.skillCheck(cropDifficulty, bonus, false, sowActionData.unitSowTimeInterval / TIME_TO_COUNTER_DIVISOR);
                         // damage barrel
 
                         // consume some stamina
 
                         // change tile to a farm tile and update all the appropriate data.
-                        Server.setSurfaceTile(tileX, tileY, Tiles.decodeHeight(encodedTile), Tiles.Tile.TILE_FIELD.id, (byte) (128 + cropId & 0xFF));
-                        Players.getInstance().sendChangedTile(tileX, tileY, onSurface, false);
-                        int resource = (int) (100.0 - sowActionData.modifiedKnowledge + source.getQualityLevel() + source.getRarity() * 20 + action.getRarity() * 50);
-                        Server.setWorldResource(tileX, tileY, resource);
-                        CropTilePoller.addCropTile(encodedTile, tileX, tileY, cropId, onSurface);
-                        // pop tile from sowActionData
-                        sowActionData.popSowTile();
+                        /*
+                            TileData is 1111 1111 or 0xFF or byte.
+                            int tileAgeMask = 0B01110000 // 0 to 7 for base 10.
+                            boolean isFarmedMask = 0B10000000 // 0 or 1 for base 10.
+                            int cropTypeMask = 0B00001111 // 0 to 15 for base 10
+                            ...
+                            1000 0000 = 128 = isFarmedMask as true + tileAge of 0. Thus, 128 + cropId & 0xFF.
+                         */
+                        // pop tile from sowActionData and use returned value to update mesh data, H in Point is an encodedTile int.
+                        Point location = sowActionData.popSowTile();
+                        Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD.id, (byte) (128 + cropId & 0xFF));
+                        Players.getInstance().sendChangedTile(location.getX(), location.getY(), onSurface, false);
+                        /*
+                        int worldResource = Server.getWorldResource(tilex, tiley); // worldResource is a 0xFFFF size.
+                        int farmedCountMask = 0B1111 1000 0000 0000 - 0 to 248 tho it should never exceed 5.
+                        int farmedChanceMask = 0B0000 0111 1111 1111 - 0 to 2047
+                         */
+
+                        int resource = (int) (100.0 - farmingSkill.getKnowledge() + source.getQualityLevel() + (source.getRarity() * 20) + (action.getRarity() * 50));
+                        Server.setWorldResource(location.getX(), location.getY(), resource);
+                        CropTilePoller.addCropTile(location.getH(), location.getX(), location.getY(), cropId, onSurface);
+                        // consume some seed volume in barrel
+                        sowActionData.consumeSeed();
+
                     }
-                    if (counter * 10.0f > time) {
+                    if (counter > time / TIME_TO_COUNTER_DIVISOR) {
+                        logger.log(Level.INFO, "counter > time: true");
                         return true;
                     }
                 }
-                return false;
-            }catch (NoSuchActionException e) {
+            }catch (Exception e) {
                 logger.log(Level.INFO, "This action does not exist?", e);
+                return true;
             }
         }
-        return ActionPerformer.super.action(action, performer, source, tileX, tileY, onSurface, heightOffset, encodedTile, actionId, counter);
+       return false;
     }
 
-    private class SowBarrelData {
+    private class SowActionData {
         private Creature performer;
         private Item barrel;
         private Item seed;
         private int seedCount;
+        private LinkedList<Point> points;  // H is an encodedTile int.
+        private Action action;
+        private int unitSowTimeInterval;
+        private int totalTime;
+        private double modifiedKnowledge;
 
-        SowBarrelData(Creature performer, Item barrel) {
+        SowActionData(Point centerTile, Action action, boolean surfaced, Creature performer, Item barrel, int encodedTile) {
+            this.action = action;
             this.performer = performer;
             this.barrel = barrel;
-            this.seed = Arrays.stream(barrel.getAllItems(false))
+
+
+            points = new LinkedList<>();
+            IntStream.range(centerTile.getX() - getSowBarrelRadius(), centerTile.getX() + getSowBarrelRadius() + 1)
+                    .forEach( posX ->
+                            IntStream.range(centerTile.getY() - getSowBarrelRadius(), centerTile.getY() + getSowBarrelRadius() + 1)
+                                    .forEach(posY -> {
+                                        points.add(new Point(posX, posY));
+                                        points.getLast().setH(encodedTile);
+                                    })
+                    );
+            points = points.stream()
+                    .filter(value -> isTileCompatibleWithSeed(value.getX(), value.getY(), surfaced))
+                    .collect(Collectors.toCollection(LinkedList::new));
+
+            seed = Arrays.stream(barrel.getAllItems(false))
                     .findFirst()
                     .orElse(null);
-            if (seed.isBulkItem() && seedIsSeed()) {
+            if (seed != null && seed.isBulkItem() && seedIsSeed()) {
                 int descriptionCount = Integer.parseInt(seed.getDescription().replaceAll("x",""));
-                int volumeCount = Math.floorDiv(seed.getWeightGrams(), seed.getRealTemplate().getWeightGrams());
+                int volumeCount = Math.floorDiv(seed.getWeightGrams(), seed.getRealTemplate().getVolume());
                 seedCount = Math.min(descriptionCount, volumeCount);
             } else {
-                this.seedCount = 0;
+                seedCount = 0;
             }
-        }
 
-        private int getSowBarrelRadius() {
-            int i = this.barrel.getData1() & 0x0f;
-            // Item.getData1() returns -1 when the Item instance's data field is null.
-            return i == -1 ? 0 : i;
-        }
-
-        private boolean seedIsSeed() {
-            return seed.getRealTemplate().isSeed();
-        }
-
-        private boolean seedIsGreaterSow() {
-            int seedCountNeeded = (int) Math.pow((getSowBarrelRadius() * 2) + 1, 2);
-            return seedCount > seedCountNeeded;
-        }
-
-        @SuppressWarnings("ConstantConditions")
-        private void consumeSeed() {
-            // The Item.setWeight() methods uses ambiguous boolean logic control args. Added named for readability.
-            boolean updateOwner = false;
-            boolean destroyOnWeightZero = true;
-
-            // Bulk items (ItemList.bulkItem or ID int 669) store volume in the weight DB entry.
-            int totalBulkVolume = seed.getWeightGrams();
-            int reduceBulkVolume = seedCount * seed.getRealTemplate().getWeightGrams();
-            int newVolume = totalBulkVolume - reduceBulkVolume;
-            seed.setWeight(newVolume, destroyOnWeightZero, updateOwner);
+            totalTime = getInitialActionTime();
         }
 
         private int getSowDimension() {
             return (getSowBarrelRadius() * 2) + 1;
         }
-    }
 
-    private class SowActionData {
-        private LinkedList<Point> points;
-        private Action action;
-        private short unitSowTimeInterval;
-        private double modifiedKnowledge;
+        private int getSowBarrelRadius() {
+            int i = barrel.getData1();
+            // Item.getData1() returns -1 when the Item instance's data field is null.
+            return i == -1 ? 0 : i;
+        }
 
-        SowActionData(Point centerTile, int radius, Action action, boolean surfaced, SowBarrelData sowBarrelData) {
-            this.action = action;
+        private boolean enoughSeedForSowing() {
+            return seedCount >= getSowTileCount();
+        }
 
-            points = new LinkedList<>();
-            IntStream.range(centerTile.getX() - radius, centerTile.getX() + radius + 1)
-                    .forEach( posX ->
-                            IntStream.range(centerTile.getY() - radius, centerTile.getY() + radius + 1)
-                                    .forEach(posY -> points.add(new Point(posX, posY)))
-                    );
-            points = points.stream()
-                    .filter(value -> isTileCompatibleWithSeed(value.getX(), value.getY(), surfaced, sowBarrelData))
-                    .collect(Collectors.toCollection(LinkedList::new));
+        private boolean seedIsSeed() {
+            return seed != null && seed.getRealTemplate().isSeed();
+        }
+
+        private int getInitialActionTime(){
+            Skill farmingSkill = performer.getSkills().getSkillOrLearn(SkillList.FARMING);
+            double bonus = Math.max(10, performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
+            Item lowestQualityItem = seed.getQualityLevel() > barrel.getQualityLevel() ? seed : barrel;
+            double knowledge = farmingSkill.getKnowledge(lowestQualityItem, bonus);
+            modifiedKnowledge = knowledge;
+            final float multiplier = 1.3f / Servers.localServer.getActionTimer();
+            double time = (100.0 - knowledge) * multiplier;
+
+            // woa
+            if (barrel != null && barrel.getSpellSpeedBonus() > 0.0f) {
+                time = 30.0 + time * (1.0 - 0.2 * barrel.getSpellSpeedBonus() / 100.0);
+            } else {
+                time += 30.0;
+            }
+            //rare barrel item, 10% speed reduction per rarity level.
+            int barrelRarity = barrel.getRarity();
+            double rarityBarrelBonus = 1 - (barrelRarity == 0 ? 1 : barrelRarity * 0.1);
+            time *= rarityBarrelBonus == 0 ? 1 : rarityBarrelBonus;
+            //rare sowing action, 30% speed reduction per rarity level.
+            int actionRarity = action.getRarity();
+            double rarityActionBonus = 1 - (actionRarity == 0 ? 1 : actionRarity * 0.3);
+            time *= rarityActionBonus == 0 ? 1 : rarityActionBonus;
+
+            // In order to ease use of modulo and trigger on action.justTickedSecond() round away the one's digit in time.
+            MathContext mathContext = null;
+            if (time < 100) {
+                mathContext = new MathContext(1);
+            }
+            else if (time >= 100 && time < 1000) {
+                mathContext = new MathContext(2);
+            }
+            else if (time >= 1000 && time < 10000) {
+                mathContext = new MathContext(3);
+            }
+            BigDecimal bigDecimal = new BigDecimal(time);
+            bigDecimal = bigDecimal.round(mathContext);
+            int roundedTime = bigDecimal.intValue();
+            unitSowTimeInterval = roundedTime;
+
+            roundedTime *= getSowTileCount();
+            return Math.max(10, roundedTime);
         }
 
         int getSowTileCount() {
             return points.size();
         }
-
-        void setUnitSowTimeInterval(short unitSowTimeInterval) {
-            this.unitSowTimeInterval = unitSowTimeInterval;
-        }
-
-        void setModifiedKnowledge(double knowledge) { this.modifiedKnowledge = knowledge; }
 
         /**
          * LIFO pop.
@@ -213,7 +254,9 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
             return points.removeFirst();
         }
 
-        private boolean isTileCompatibleWithSeed(int posX, int posY, boolean surfaced, SowBarrelData sowBarrelData) {
+        private boolean isTileCompatibleWithSeed(int posX, int posY, boolean surfaced) {
+            if (!seedIsSeed())
+                return false;
             MeshIO sowMesh;
             if (surfaced) {
                 sowMesh = Server.surfaceMesh;
@@ -223,7 +266,7 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
 
             boolean isTileUnderWater = Terraforming.isCornerUnderWater(posX, posY, surfaced);
             boolean isSeedAquatic;
-            switch (sowBarrelData.seed.getRealTemplateId()){
+            switch (seed.getRealTemplateId()){
                 case ItemList.reedSeed:
                     isSeedAquatic = true;
                     break;
@@ -237,7 +280,7 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
             boolean isSlopeMinimal = Terraforming.isFlat(posX, posY, surfaced, 4);
 
             byte seedNeededTile;
-            switch (sowBarrelData.seed.getRealTemplateId()) {
+            switch (seed.getRealTemplateId()) {
                 case ItemList.mushroomBlack:
                     seedNeededTile = Tiles.Tile.TILE_CAVE.id;
                     break;
@@ -259,67 +302,50 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
                 default:
                     seedNeededTile = Tiles.Tile.TILE_DIRT.id;
             }
-            boolean seedsCompatibleWithTile = seedNeededTile == sowMesh.getTile(posX, posY);
+            boolean seedsCompatibleWithTile = seedNeededTile == Tiles.decodeType(sowMesh.getTile(posX, posY));
 
             return isTileUnderWater == isSeedAquatic && isSlopeMinimal && seedsCompatibleWithTile;
         }
-    }
 
-    private static int getInitialActionTime(SowBarrelData sowBarrelData, Action action, SowActionData sowActionData){
-        Skill farmingSkill = sowBarrelData.performer.getSkills().getSkillOrLearn(SkillList.FARMING);
-        double bonus = Math.max(10, sowBarrelData.performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
-        Item lowestQualityItem = sowBarrelData.seed.getQualityLevel() > sowBarrelData.barrel.getQualityLevel() ? sowBarrelData.seed : sowBarrelData.barrel;
-        double knowledge = farmingSkill.getKnowledge(lowestQualityItem, bonus);
-        sowActionData.setModifiedKnowledge(knowledge);
-        final float multiplier = 1.3f / Servers.localServer.getActionTimer();
-        double time = (100.0 - knowledge) * multiplier;
+        @SuppressWarnings("ConstantConditions")
+        private void consumeSeed() {
+            // The Item.setWeight() methods uses ambiguous boolean logic control args. Added named for readability.
+            boolean updateOwner = false;
+            boolean destroyOnWeightZero = true;
 
-        // woa
-        if (sowBarrelData.barrel != null && sowBarrelData.barrel.getSpellSpeedBonus() > 0.0f) {
-            time = 30.0 + time * (1.0 - 0.2 * sowBarrelData.barrel.getSpellSpeedBonus() / 100.0);
-        } else {
-            time += 30.0;
+            // Bulk items (ItemList.bulkItem or ID int 669) store volume in the weight DB entry.
+            int totalBulkVolume = seed.getWeightGrams();
+            int reduceBulkVolume = seedCount * seed.getRealTemplate().getWeightGrams();
+            int newVolume = totalBulkVolume - reduceBulkVolume;
+            seed.setWeight(newVolume, destroyOnWeightZero, updateOwner);
         }
-
-        //rare barrel item, 10% speed reduction per rarity level.
-        int barrelRarity = sowBarrelData.barrel.getRarity();
-        double rarityBarrelBonus = barrelRarity == 0 ? 1 : barrelRarity * 0.1;
-        time *= rarityBarrelBonus;
-        //rare sowing action, 30% speed reduction per rarity level.
-        int actionRarity = action.getRarity();
-        double rarityActionBonus = actionRarity == 0 ? 1 : actionRarity * 0.3;
-        time *= rarityActionBonus;
-        sowActionData.setUnitSowTimeInterval((short) time);
-
-        time *= sowActionData.getSowTileCount();
-        return (int) Math.max(10, time);
     }
 
-    private static boolean checkRequirements(SowBarrelData sowBarrelData, SowActionData sowActionData) {
-        boolean noSeedWithin = Objects.equals(sowBarrelData.seed, null);
+    private boolean checkRequirements(SowActionData sowActionData) {
+        boolean noSeedWithin = Objects.equals(sowActionData.seed, null);
         if (noSeedWithin) {
-            sowBarrelData.performer.getCommunicator().sendNormalServerMessage("The seed barrel is empty.");
+            sowActionData.performer.getCommunicator().sendNormalServerMessage("The seed barrel is empty.");
             return false;
         }
-        ItemTemplate seedTemplate = sowBarrelData.seed.getRealTemplate();
-        if (!sowBarrelData.seed.isSeed()) {
-            sowBarrelData.performer.getCommunicator().sendNormalServerMessage("Only seed can be sown.");
+        ItemTemplate seedTemplate = sowActionData.seed.getRealTemplate();
+        if (!sowActionData.seedIsSeed()) {
+            sowActionData.performer.getCommunicator().sendNormalServerMessage("Only seed can be sown.");
             return false;
         }
-        int sowBarrelRadius = sowBarrelData.getSowBarrelRadius();
-        String sowArea = sowBarrelData.getSowDimension() + " by " + sowBarrelData.getSowDimension() + " area.";
-        boolean farmSkillNotEnoughForBarrelRadius = getMaxRadiusFromFarmSkill(sowBarrelData.performer) < sowBarrelRadius;
+        int sowBarrelRadius = sowActionData.getSowBarrelRadius();
+        String sowArea = sowActionData.getSowDimension() + " by " + sowActionData.getSowDimension() + " area";
+        boolean farmSkillNotEnoughForBarrelRadius = getMaxRadiusFromFarmSkill(sowActionData.performer) < sowBarrelRadius;
         if (farmSkillNotEnoughForBarrelRadius){
-            sowBarrelData.performer.getCommunicator().sendNormalServerMessage( "You don't have enough farming skill to sow a " + sowArea);
+            sowActionData.performer.getCommunicator().sendNormalServerMessage( "You don't have enough farming skill to sow a " + sowArea + ".");
             return false;
         }
-        if (!sowBarrelData.seedIsGreaterSow()) {
+        if (!sowActionData.enoughSeedForSowing()) {
             String seedName = seedTemplate.getName();
-            sowBarrelData.performer.getCommunicator().sendNormalServerMessage("You don't have enough " + seedName + " to sow a " + sowArea);
+            sowActionData.performer.getCommunicator().sendNormalServerMessage("You don't have enough " + seedName + " to sow a " + sowArea + ".");
             return false;
         }
         if (sowActionData.getSowTileCount() < 1) {
-            sowBarrelData.performer.getCommunicator().sendNormalServerMessage("The " + sowArea + " needs at least one tile that can be sown");
+            sowActionData.performer.getCommunicator().sendNormalServerMessage("The " + sowArea + " needs at least one tile that can be sown");
             return false;
         }
 
@@ -352,9 +378,9 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
      */
     private static void setSowActionDataReflect(SowActionData sowActionData) {
         try {
-            ReflectionUtil.setPrivateField(sowActionData.action, ReflectionUtil.getField(Action.class.getClass(), "sowActionData"),
+            ReflectionUtil.setPrivateField(sowActionData.action, ReflectionUtil.getField(Class.forName(Action.class.getName()), "sowActionData"),
                     sowActionData);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
+        } catch (NoSuchFieldException | IllegalAccessException | ClassNotFoundException e) {
             logger.log(Level.WARNING, e.getMessage(), e);
         }
     }
@@ -362,8 +388,8 @@ class PropagateAction implements WurmServerMod, ModAction, BehaviourProvider, Ac
     private static SowActionData getSowActionDataReflect(Action action) {
         SowActionData toReturn = null;
         try {
-            toReturn = ReflectionUtil.getPrivateField(action, ReflectionUtil.getField(Action.class.getClass(), "sowActionData"));
-        } catch (NoSuchFieldException | IllegalAccessException e) {
+            toReturn = ReflectionUtil.getPrivateField(action, ReflectionUtil.getField(Class.forName(Action.class.getName()), "sowActionData"));
+        } catch (NoSuchFieldException | IllegalAccessException | ClassNotFoundException e) {
             logger.log(Level.WARNING, e.getMessage(), e);
         }
         return toReturn;
