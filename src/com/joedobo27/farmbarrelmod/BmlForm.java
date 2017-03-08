@@ -175,7 +175,7 @@ public class BmlForm {
     }
 
     public void addButton(String name, String id) {
-        buf.append(indent("button{text='  " + name + "  ';id='" + id + "'}"));
+        buf.append(indent("button{text='" + name + "';id='" + id + "'}"));
     }
 
     public void addInput(@NotNull String id, @Nullable String defaultText, @Nullable Integer maxChar) {
