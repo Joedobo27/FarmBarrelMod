@@ -1,16 +1,12 @@
-package com.Joedobo27.farmbarrelmod;
+package com.joedobo27.farmbarrelmod;
 
 
-import com.sun.org.apache.bcel.internal.classfile.ConstantPool;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.SkillList;
-import javassist.CannotCompileException;
 import javassist.ClassPool;
-import javassist.CtField;
 import javassist.NotFoundException;
 import javassist.bytecode.BadBytecode;
 import javassist.bytecode.Bytecode;
-import javassist.bytecode.ConstPool;
 import javassist.bytecode.Opcode;
 import org.gotti.wurmunlimited.modloader.classhooks.CodeReplacer;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
@@ -25,8 +21,10 @@ import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import static com.Joedobo27.farmbarrelmod.BytecodeTools.addConstantPoolReference;
-import static com.Joedobo27.farmbarrelmod.BytecodeTools.findConstantPoolReference;
+import java.util.stream.Collectors;
+
+import static com.joedobo27.farmbarrelmod.BytecodeTools.addConstantPoolReference;
+import static com.joedobo27.farmbarrelmod.BytecodeTools.findConstantPoolReference;
 
 public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, ItemTemplatesCreatedListener, ServerStartedListener {
 
@@ -42,18 +40,27 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     private static ArrayList<Integer> sowRadius = new ArrayList<>(Arrays.asList(0,1,2,3,4,5));
     private static ArrayList<Integer> skillUnlockPoints = new ArrayList<>(Arrays.asList(0,10,50,70,90,100));
 
-    private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
-
+    private static final Logger logger;
+    static {
+        logger = Logger.getLogger(FarmBarrelMod.class.getName());
+        classPool = HookManager.getInstance().getClassPool();
+    }
 
     @Override
     public void configure(Properties properties) {
-        sowRadius.clear();
-        for (String a :  properties.getProperty("sowRadius", sowRadius.toString().replaceAll("\\[|\\]", "")).split(",")){
-            sowRadius.add(Integer.valueOf(a));
+        if (properties.getProperty("sowRadius").length() > 0) {
+            logger.log(Level.INFO, "sowRadius: " + properties.getProperty("sowRadius"));
+            sowRadius = Arrays.stream(properties.getProperty("sowRadius").replaceAll("\\s", "").split(","))
+                    .mapToInt(Integer::parseInt)
+                    .boxed()
+                    .collect(Collectors.toCollection(ArrayList::new));
         }
-        skillUnlockPoints.clear();
-        for (String a :  properties.getProperty("skillUnlockPoints", skillUnlockPoints.toString().replaceAll("\\[|\\]", "")).split(",")){
-            skillUnlockPoints.add(Integer.valueOf(a));
+        if (properties.getProperty("skillUnlockPoints").length() > 0) {
+            logger.log(Level.INFO, "skillUnlockPoints: " + properties.getProperty("skillUnlockPoints"));
+            skillUnlockPoints = Arrays.stream(properties.getProperty("skillUnlockPoints").replaceAll("\\s", "").split(","))
+                    .mapToInt(Integer::parseInt)
+                    .boxed()
+                    .collect(Collectors.toCollection(ArrayList::new));
         }
 
         sowBarrelX = Integer.parseInt(properties.getProperty("sowBarrelX", Integer.toString(sowBarrelX)));
@@ -69,12 +76,10 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     public void init() {
         try {
             ModActions.init();
-            classPool = HookManager.getInstance().getClassPool();
-            addActionData();
-            moveToItemBytecode();
-            takeBytecode();
-            setSowBarrelInitialDataBytecode();
-        } catch (NotFoundException | CannotCompileException | BadBytecode e) {
+            //moveToItemBytecode();
+            //takeBytecode();
+            //setSowBarrelInitialDataBytecode();
+        } catch (Exception e) {
             logger.log(Level.WARNING, e.getMessage(), e);
         }
     }
@@ -83,11 +88,11 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     public void onItemTemplatesCreated() {
         ItemTemplateBuilder sowBarrel = new ItemTemplateBuilder("jdbSowBarrel");
         sowBarrelTemplateId = IdFactory.getIdFor("jdbSowBarrel", IdType.ITEMTEMPLATE);
-        sowBarrel.name("seed barrel","seed barrels", "A tool used to sow seed over an area.");
+        sowBarrel.name("Seed barrel","seed barrels", "A tool used to sow seed over an area.");
         sowBarrel.size(3);
         //sowBarrel.descriptions();
-        sowBarrel.itemTypes(new short[]{ItemTypes.ITEM_TYPE_WOOD, ItemTypes.ITEM_TYPE_BULKCONTAINER, ItemTypes.ITEM_TYPE_HOLLOW,
-        ItemTypes.ITEM_TYPE_NAMED, ItemTypes.ITEM_TYPE_REPAIRABLE, ItemTypes.ITEM_TYPE_COLORABLE, ItemTypes.ITEM_TYPE_HASDATA});
+        sowBarrel.itemTypes(new short[]{ItemTypes.ITEM_TYPE_WOOD, ItemTypes.ITEM_TYPE_NAMED, ItemTypes.ITEM_TYPE_REPAIRABLE,
+                ItemTypes.ITEM_TYPE_COLORABLE, ItemTypes.ITEM_TYPE_HASDATA});
         sowBarrel.imageNumber((short) 245);
         sowBarrel.behaviourType((short) 1);
         sowBarrel.combatDamage(0);
@@ -112,6 +117,9 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     @Override
     public void onServerStarted() {
         ModActions.registerAction(new PropagateAction());
+        ModActions.registerAction(new FillBarrelAction());
+        ModActions.registerAction(new ConfigureSeedBarrelAction());
+
 
         AdvancedCreationEntry sowBarrel = CreationEntryCreator.createAdvancedEntry(SkillList.CARPENTRY,
                 ItemList.plank, ItemList.pegWood, sowBarrelTemplateId, false, false, 0.0f, true, false,
@@ -171,20 +179,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
                 "cont");
         cont.getCodeIterator().insert(3667, insert.get());
         cont.getMethodInfo().rebuildStackMapIf6(classPool, AdvancedCreationEntry.getClassFile());
-    }
-
-    /**
-     *
-     * was...
-     *      if (targetItem.getOwnerId() > 0L && (targetItem.isBulkItem() || targetItem.isBulkContainer())) {
-     *          this.sendNormalServerMessage("You are not allowed to do that.");
-     *          return;
-     *      }
-     * becomes...
-     */
-    @SuppressWarnings("unused")
-    private void moveInventoryBytecode() {
-
     }
 
     /**
@@ -289,8 +283,8 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
      *          return false;
      *      }
      *
-     * @throws NotFoundException
-     * @throws BadBytecode
+     * @throws NotFoundException JA related, forwarded
+     * @throws BadBytecode JA related, forwarded
      */
     private void moveToItemBytecode() throws NotFoundException, BadBytecode {
         JAssistClassData Item = new JAssistClassData("com.wurmonline.server.items.Item", classPool);
@@ -514,7 +508,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         moveToItem.getMethodInfo().rebuildStackMapIf6(classPool, Item.getClassFile());
     }
 
-    @SuppressWarnings("unused")
     public static boolean isRestrictedMovementBulk(Item targetItem) {
         if (targetItem.getOwnerId() <= 0L)
             return false;
@@ -530,27 +523,25 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         }
     }
 
-    @SuppressWarnings("unused")
     public static boolean isOnlyTakeWhenEmptyHook(Item target) {
         switch (target.getTemplateId()){
             case ItemList.hopper:
                 //FSB
-                return !target.isEmpty();
+                return !target.isEmpty(false);
             case ItemList.bulkContainer:
                 //BSB
-                return !target.isEmpty();
+                return !target.isEmpty(false);
             case ItemList.tentExploration:
-                return !target.isEmpty();
+                return !target.isEmpty(false);
             case ItemList.tentMilitary:
-                return !target.isEmpty();
+                return !target.isEmpty(false);
             case ItemList.tent:
-                return !target.isEmpty();
+                return !target.isEmpty(false);
             default:
                 return false;
         }
     }
 
-    @SuppressWarnings("unused")
     public static boolean canItemGoInBulkHook(Item bulkItem, Item bulkContainer) {
         if (!bulkItem.isBulkItem())
             return false;
@@ -566,14 +557,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         }
     }
 
-    private static void addActionData() throws NotFoundException, CannotCompileException {
-        JAssistClassData Action = new JAssistClassData("com.wurmonline.server.behaviours.Action", classPool);
-        JAssistClassData PropagateAction = new JAssistClassData("com.Joedobo27.farmbarrelmod.PropagateAction$SowActionData", classPool);
-        CtField f = new CtField(PropagateAction.getCtClass(), "sowActionData", Action.getCtClass());
-        Action.getCtClass().addField(f);
-    }
-
-    @SuppressWarnings("WeakerAccess")
     public static int getSowBarrelTemplateId() {
         return sowBarrelTemplateId;
     }

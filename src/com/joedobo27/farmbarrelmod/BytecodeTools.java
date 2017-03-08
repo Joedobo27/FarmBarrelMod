@@ -1,4 +1,4 @@
-package com.Joedobo27.farmbarrelmod;
+package com.joedobo27.farmbarrelmod;
 
 import javassist.bytecode.*;
 
