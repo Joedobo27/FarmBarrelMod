@@ -130,6 +130,7 @@ public class BmlForm {
 
     public void addHidden(String name, String val) {
         buf.append(indent("passthrough{id=\"" + name + "\";text=\"" + val + "\"}"));
+        //passthrough{id="id";text="" + this.id + ""}
     }
 
     public void addText(String text, String... args) {

@@ -59,24 +59,17 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
     public boolean action(Action action, Creature performer, Item source, Item target, short num, float counter) {
         if (num == actionId) {
             ConfigureSeedBarrelQuestion configureSeedBarrelQuestion;
-            Question question;
             if (counter == 1.0f) {
                  configureSeedBarrelQuestion = new ConfigureSeedBarrelQuestion(
-                        performer, "Configure Barrel", "Configure the barrel with.", target.getWurmId());
-                configureSeedBarrelQuestion.sendQuestion(configureSeedBarrelQuestion.getMyQuestion());
+                        performer, "Configure Barrel", "Configure the barrel with.", 501, target.getWurmId());
                 actionListener.put(action, configureSeedBarrelQuestion);
                 logger.log(Level.INFO, configureSeedBarrelQuestion.toString());
                 return false;
             }
             else {
                 configureSeedBarrelQuestion = actionListener.get(action);
-                question = configureSeedBarrelQuestion.getMyQuestion();
-                if (action.justTickedSecond()) {
-                    if (configureSeedBarrelQuestion.getAnswer() != null)
-                        logger.log(Level.INFO, configureSeedBarrelQuestion.getAnswer().toString());
-                    logger.log(Level.INFO, configureSeedBarrelQuestion.toString());
-                }
-                if (question.isAnswered()){
+                if (configureSeedBarrelQuestion.isAnswered()) {
+                    logger.log(Level.INFO, "Question answered.");
                     return true;
                 }
                 if (counter > 100){
