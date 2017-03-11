@@ -8,6 +8,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
+@SuppressWarnings({"unused", "SameParameterValue"})
 public class BmlForm {
     private static Logger logger;
     private final StringBuffer buf = new StringBuffer();
@@ -43,7 +44,7 @@ public class BmlForm {
         closeDefault = true;        // in toString() we close the opened: varray, scroll, border
     }
 
-    public BmlForm(String formTitle, int width, int height) {
+    BmlForm(String formTitle, int width, int height) {
         beginBorder(width, height);
         beginCenter();
         addBoldText(formTitle);
@@ -57,83 +58,83 @@ public class BmlForm {
     }
 
 
-    public void beginBorder() {
+    private void beginBorder() {
         buf.append(indent("border{"));
         indentNum++;
         openBorders++;
     }
 
-    public void beginBorder(int width, int height) {
+    private void beginBorder(int width, int height) {
         buf.append(indent("border{"));
         setSizeAttribute(width, height);
         indentNum++;
         openBorders++;
     }
 
-    public void endBorder() {
+    private void endBorder() {
         indentNum--;
         buf.append(indent("}"));
         openBorders--;
     }
 
-    public void beginCenter() {
+    private void beginCenter() {
         buf.append(indent("center{"));
         indentNum++;
         openCenters++;
     }
 
-    public void endCenter() {
+    private void endCenter() {
         indentNum--;
         buf.append(indent("};null;"));
         openCenters--;
     }
 
-    public void beginVerticalFlow() {
+    private void beginVerticalFlow() {
         buf.append(indent("varray{rescale=\"true\";"));
         indentNum++;
         openVarrays++;
     }
 
-    public void endVerticalFlow() {
+    private void endVerticalFlow() {
         indentNum--;
         buf.append(indent("}"));
         openVarrays--;
     }
 
-    public void beginScroll() {
+    private void beginScroll() {
         buf.append(indent("scroll{vertical=\"true\";horizontal=\"false\";"));
         indentNum++;
         openScrolls++;
     }
 
-    public void endScroll() {
+    private void endScroll() {
         indentNum--;
         buf.append(indent("};null;null;"));
         openScrolls--;
     }
 
-    public void beginHorizontalFlow() {
+    void beginHorizontalFlow() {
         buf.append(indent("harray {"));
         indentNum++;
         openHarrays++;
     }
 
-    public void endHorizontalFlow() {
+    void endHorizontalFlow() {
         indentNum--;
         buf.append(indent("}"));
         openHarrays--;
     }
 
-    public void addBoldText(String text, String... args) {
+    private void addBoldText(String text, String... args) {
         addText(text, "bold", args);
     }
 
-    public void addHidden(String name, String val) {
+    void addHidden(String name, String val) {
         buf.append(indent("passthrough{id=\"" + name + "\";text=\"" + val + "\"}"));
         //passthrough{id="id";text="" + this.id + ""}
     }
 
-    public void addText(String text, String... args) {
+    void addText(String text, String... args) {
         addText(text, "", args);
     }
 
@@ -153,7 +154,7 @@ public class BmlForm {
     }
 
     private void addText(String text, String type, String... args) {
-        String[] lines = text.split("\n");
+        String[] lines = text.split("\\r\\n");
 
         for (String l : lines) {
             if (beautify) {
@@ -175,11 +176,11 @@ public class BmlForm {
         }
     }
 
-    public void addButton(String name, String id) {
+    void addButton(String name, String id) {
         buf.append(indent("button{text='" + name + "';id='" + id + "'}"));
     }
 
-    public void addInput(@NotNull String id, @Nullable String defaultText, @Nullable Integer maxChar) {
+    void addInput(@NotNull String id, @Nullable String defaultText, @Nullable Integer maxChar) {
 
         buf.append("input{id=\"").append(id).append("\"");
         if (defaultText != null) {
@@ -191,17 +192,39 @@ public class BmlForm {
         buf.append("};");
     }
 
-    public void addCheckBox(@NotNull String id, @NotNull Boolean selected ) {
+    void addCheckBox(@NotNull String id, @NotNull Boolean selected ) {
         buf.append("checkbox{id=\"").append(id).append("\";");
         buf.append("selected=\"").append(Boolean.toString(selected)).append("\"};");
     }
 
-    public void addLabel(@NotNull String text) {
+    void addLabel(@NotNull String text) {
         buf.append("label{text=\"").append(text).append("\"};");
     }
 
-    public void setSizeAttribute(int width, int height) {
+    private void setSizeAttribute(int width, int height) {
         buf.append(String.format("size=\"%1$s,%2$s\"", width, height));
+    }
+
+    void beginTable(int rows, int columns, String columnLabels){
+        int indexWalker = 0;
+        int columnLabelCount = -1;
+        int index;
+        do {
+            indexWalker = columnLabels.indexOf("};", indexWalker);
+            if (indexWalker != -1)
+                indexWalker++;
+            columnLabelCount++;
+        } while (columnLabelCount < columns && indexWalker != -1);
+        if (columnLabelCount != columns){
+            throw new IllegalArgumentException("The number of columns does not match the number of columnLabels.");
+        }
+        indentNum++;
+        buf.append("table{rows=\"").append(rows).append("\";cols=\"").append(columns).append("\";").append(columnLabels);
+    }
+
+    void endTable(){
+        indentNum--;
+        buf.append("};");
     }
 
     public String toString() {

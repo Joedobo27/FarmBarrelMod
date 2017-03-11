@@ -557,7 +557,7 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         }
     }
 
-    public static int getSowBarrelTemplateId() {
+    static int getSowBarrelTemplateId() {
         return sowBarrelTemplateId;
     }
 
@@ -567,5 +567,25 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
 
     static ArrayList<Integer> getSkillUnlockPoints() {
         return skillUnlockPoints;
+    }
+
+    /**
+     * Retrieve custom serialized data from the data1 column of the ITEMDATA table. Custom defined by the mask: 0xF0000000
+     *
+     * @param item WU Item object
+     * @return int value, (Side - 1) / 2 = return; where side is always odd.
+     */
+    static int decodeRadius(Item item) {
+        return (item.getData1() >>> 28) & 0xF;
+    }
+
+    /**
+     * Retrieve custom serialized data from the data1 column of the ITEMDATA table. Custom defined by the mask: 0x0FFF0000
+     *
+     * @param item WU Item object
+     * @return int value, how many seed to move into the seedBarrel for a supply action.
+     */
+    static int decodeSupplyQuantity(Item item) {
+        return (item.getData1() >>> 16) & 0xFFF;
     }
 }

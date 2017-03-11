@@ -27,12 +27,10 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
     private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
     private final short actionId;
     private final ActionEntry actionEntry;
-    private WeakHashMap<Action, ConfigureSeedBarrelQuestion> actionListener = new WeakHashMap<>();
 
     ConfigureSeedBarrelAction() {
         actionId = (short) ModActions.getNextActionId();
-        actionEntry = ActionEntry.createEntry(actionId, "Configure", "Configuring", new int[] {ACTION_NON_LIBILAPRIEST.getId(),
-                ACTION_SHOW_ON_SELECT_BAR.getId()});
+        actionEntry = ActionEntry.createEntry(actionId, "Configure", "Configuring", new int[] {ACTION_NON_LIBILAPRIEST.getId()});
         ModActions.registerAction(actionEntry);
     }
 
@@ -58,25 +56,9 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
     @Override
     public boolean action(Action action, Creature performer, Item source, Item target, short num, float counter) {
         if (num == actionId) {
-            ConfigureSeedBarrelQuestion configureSeedBarrelQuestion;
-            if (counter == 1.0f) {
-                 configureSeedBarrelQuestion = new ConfigureSeedBarrelQuestion(
-                        performer, "Configure Barrel", "Configure the barrel with.", 501, target.getWurmId());
-                actionListener.put(action, configureSeedBarrelQuestion);
-                logger.log(Level.INFO, configureSeedBarrelQuestion.toString());
-                return false;
-            }
-            else {
-                configureSeedBarrelQuestion = actionListener.get(action);
-                if (configureSeedBarrelQuestion.isAnswered()) {
-                    logger.log(Level.INFO, "Question answered.");
-                    return true;
-                }
-                if (counter > 100){
-                    performer.getCommunicator().sendNormalServerMessage("Question unanswered.");
-                    return true;
-                }
-            }
+            new ConfigureSeedBarrelQuestion(
+                    performer, "Configure Barrel", "Configure the barrel with.", 501, target.getWurmId());
+            return true;
         }
         return false;
     }
