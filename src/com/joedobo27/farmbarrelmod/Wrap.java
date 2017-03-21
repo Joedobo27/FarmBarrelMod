@@ -103,27 +103,28 @@ class Wrap {
 
     @SuppressWarnings("unused")
     enum Crops {
-        BARLEY(0, 28, 28, 20),
-        WHEAT(1, 29, 29, 30),
-        RYE(2, 30, 30, 10),
-        OAT(3, 31, 31, 15),
-        CORN(4, 32, 32, 40),
-        PUMPKIN(5, 34, 33, 15),
-        POTATO(6, 35, 35, 4),
-        COTTON(7, 145, 144, 7),
-        WEMP(8, 317, 316, 10),
-        GARLIC(9, 356, 356, 70),
-        ONION(10, 355, 355, 60),
-        REED(11, 744, 743, 20),
-        RICE(12, 746, 746, 80),
-        STRAWBERRIES(13, 750, 362, 60),
-        CARROTS(14, 1145, 1133, 25),
-        CABBAGE(15, 1146, 1134, 35),
-        TOMATOS(16, 1147, 1135, 45),
-        SUGAR_BEET(17, 1148, 1136, 85),
-        LETTUCE(18, 1149, 1137, 55),
-        PEAS(19, 1150, 1138, 65),
-        CUCUMBER(20, 1248, 1247, 15);
+        EMPTY(0, 0, 0, 0),
+        BARLEY(1, 28, 28, 20),
+        WHEAT(2, 29, 29, 30),
+        RYE(3, 30, 30, 10),
+        OAT(4, 31, 31, 15),
+        CORN(5, 32, 32, 40),
+        PUMPKIN(6, 34, 33, 15),
+        POTATO(7, 35, 35, 4),
+        COTTON(8, 145, 144, 7),
+        WEMP(9, 317, 316, 10),
+        GARLIC(10, 356, 356, 70),
+        ONION(11, 355, 355, 60),
+        REED(12, 744, 743, 20),
+        RICE(13, 746, 746, 80),
+        STRAWBERRIES(14, 750, 362, 60),
+        CARROTS(15, 1145, 1133, 25),
+        CABBAGE(16, 1146, 1134, 35),
+        TOMATOS(17, 1147, 1135, 45),
+        SUGAR_BEET(18, 1148, 1136, 85),
+        LETTUCE(19, 1149, 1137, 55),
+        PEAS(20, 1150, 1138, 65),
+        CUCUMBER(21, 1248, 1247, 15);
 
         private final int id;
         private final int seedTemplateId;
@@ -143,6 +144,14 @@ class Wrap {
 
         public int getSeedTemplateId() {
             return seedTemplateId;
+        }
+
+        static int getSeedTemplateIdFromCropId(int cropId) {
+            Crops crops = Arrays.stream(values())
+                    .filter(crop -> crop.id == cropId)
+                    .findFirst()
+                    .orElseThrow(() -> new NullPointerException("No matching cropId in Crops.enum") );
+            return crops.seedTemplateId;
         }
 
         static int getCropIdFromSeedTemplateId(int seedTemplateId) {
@@ -165,6 +174,10 @@ class Wrap {
                     .mapToInt(Crops::getId)
                     .findFirst()
                     .orElseThrow(() -> new NullPointerException("No matching cropId in Crops.enum"));
+        }
+
+        static boolean isCropId(int id){
+            return id < Crops.values().length;
         }
 
         // new Crops(0, "barley", 28, 28, "handfuls", 20.0),

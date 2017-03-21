@@ -588,4 +588,13 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     static int decodeSupplyQuantity(Item item) {
         return (item.getData1() >>> 16) & 0xFFF;
     }
+
+    /**
+     * Retrieve custom serialized data from the data1 column of the ITEMDATA table. Custom defined by the mask: 0x0000FF00.
+     *
+     * @param item WU Item object
+     * @return int value, an identifier for Wrap.Crop for the seed type in barrel.
+     */
+    static int decodeContainedSeed(Item item) { return (item.getData1() >>> 8) & 0xFF;
+    }
 }
