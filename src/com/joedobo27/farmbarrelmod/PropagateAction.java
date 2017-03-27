@@ -40,7 +40,8 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item source, int tileX, int tileY, boolean onSurface, int encodedTile){
-        if (performer instanceof Player && source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()){
+        if (performer instanceof Player && source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId() &&
+                Tiles.decodeType(encodedTile) == Tiles.TILE_TYPE_DIRT){
             //noinspection ArraysAsListWithZeroOrOneArgument
             return Arrays.asList(actionEntry);
         }else {
@@ -54,8 +55,8 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
     }
 
     @Override
-    public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface, int heightOffset, int encodedTile, short actionId, float counter) {
-        if (actionId == getActionId() && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
+    public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface, int heightOffset, int encodedTile, short aActionId, float counter) {
+        if (aActionId == actionId && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
             try {
                 int time;
                 final float TIME_TO_COUNTER_DIVISOR = 10.0f;
@@ -81,8 +82,8 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                 if (isEndOfTileSowing) {
                     int cropId;
                     double cropDifficulty;
-                    cropId = Wrap.Crops.getCropIdFromSeedTemplateId(propagateActionData.getSeed().getRealTemplateId());
-                    cropDifficulty = Wrap.Crops.getCropDifficultyFromCropId(cropId);
+                    cropId = Crops.getCropIdFromSeedTemplateId(propagateActionData.getSeed().getRealTemplateId());
+                    cropDifficulty = Crops.getCropDifficultyFromCropId(cropId);
 
                     // skill check and use the unit time in propagateActionData as counts
                     Skill farmingSkill = performer.getSkills().getSkillOrLearn(SkillList.FARMING);

@@ -3,13 +3,14 @@ package com.joedobo27.farmbarrelmod;
 
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.SkillList;
-import javassist.ClassPool;
-import javassist.NotFoundException;
+import javassist.*;
 import javassist.bytecode.BadBytecode;
 import javassist.bytecode.Bytecode;
+import javassist.bytecode.Descriptor;
 import javassist.bytecode.Opcode;
 import org.gotti.wurmunlimited.modloader.classhooks.CodeReplacer;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
+import org.gotti.wurmunlimited.modloader.classhooks.InvocationHandlerFactory;
 import org.gotti.wurmunlimited.modloader.interfaces.*;
 import org.gotti.wurmunlimited.modsupport.IdFactory;
 import org.gotti.wurmunlimited.modsupport.IdType;
@@ -18,6 +19,8 @@ import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -76,6 +79,7 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     public void init() {
         try {
             ModActions.init();
+            insertIntoGetName();
             //moveToItemBytecode();
             //takeBytecode();
             //setSowBarrelInitialDataBytecode();
@@ -129,6 +133,57 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         sowBarrel.addRequirement(new CreationRequirement(3, ItemList.rope, 1, true));
     }
 
+    /**
+     * Insert a code block into Item.getName(Z) to handle custom naming when the seed barrel contains seeds. For example
+     * name a barrel: Seed barrel [corn].
+     * insert just before this:
+     *      builder.append(this.name);
+     *
+     * @throws NotFoundException JA related, forwarded
+     * @throws CannotCompileException JA related, forwarded
+     */
+    private void insertIntoGetName() throws NotFoundException, CannotCompileException {
+        CtClass itemCtClass = classPool.get("com.wurmonline.server.items.Item");
+
+        CtClass returnType = classPool.get("java.lang.String");
+        CtClass[] paramTypes = {CtPrimitiveType.booleanType};
+        CtMethod getNameCtMethod = itemCtClass.getMethod("getName", Descriptor.ofMethod(returnType, paramTypes));
+
+        String source = "" +
+                "" +
+                "if (this.getTemplateId() == com.joedobo27.farmbarrelmod.FarmBarrelMod.getSowBarrelTemplateId() " +
+                "&& com.joedobo27.farmbarrelmod.FarmBarrelMod.decodeContainedSeed(this) != 0){ " +
+                "stoSend = \" [\" + com.joedobo27.farmbarrelmod.Crops.getCropNameFromCropId(" +
+                "com.joedobo27.farmbarrelmod.FarmBarrelMod.decodeContainedSeed(this)) + \"]\";}" +
+                "";
+
+        getNameCtMethod.insertAt(1193, source);
+    }
+
+    /**
+     * I'm going to try and use a JA inserted code block instead of hooking in the calling of getName() first.
+     *
+     * @throws NotFoundException HookManager reflection eror, forwarded.
+     */
+    private void installGetNameHook() throws NotFoundException{
+        CtClass returnType = classPool.get("java.lang.String");
+        CtClass[] paramTypes = {CtPrimitiveType.booleanType};
+        HookManager.getInstance().registerHook("com.wurmonline.server.items.Item", "getName",
+                Descriptor.ofMethod(returnType, paramTypes), new InvocationHandlerFactory() {
+
+            @Override
+            public InvocationHandler createInvocationHandler() {
+                return new InvocationHandler() {
+
+                    @Override
+                    public Object invoke(Object object, Method method, Object[] args) throws Throwable {
+                        Item item = (Item) object;
+                        return method.invoke(object, args);
+                    }
+                };
+            }
+        });
+    }
     /**
      * In AdvancedCreationEntry.cont() add code to set the new sow barrel's data1 field to 0.
      * Within the "create" if-block....
@@ -557,7 +612,7 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         }
     }
 
-    static int getSowBarrelTemplateId() {
+    public static int getSowBarrelTemplateId() {
         return sowBarrelTemplateId;
     }
 
@@ -595,6 +650,11 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
      * @param item WU Item object
      * @return int value, an identifier for Wrap.Crop for the seed type in barrel.
      */
-    static int decodeContainedSeed(Item item) { return (item.getData1() >>> 8) & 0xFF;
+    public static int decodeContainedSeed(Item item) {
+        int id = (item.getData1() >>> 8) & 0xFF;
+        if (id > Crops.values().length - 1)
+            return 0;
+        else
+            return id;
     }
 }
