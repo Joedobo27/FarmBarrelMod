@@ -624,37 +624,4 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         return skillUnlockPoints;
     }
 
-    /**
-     * Retrieve custom serialized data from the data1 column of the ITEMDATA table. Custom defined by the mask: 0xF0000000
-     *
-     * @param item WU Item object
-     * @return int value, (Side - 1) / 2 = return; where side is always odd.
-     */
-    static int decodeRadius(Item item) {
-        return (item.getData1() >>> 28) & 0xF;
-    }
-
-    /**
-     * Retrieve custom serialized data from the data1 column of the ITEMDATA table. Custom defined by the mask: 0x0FFF0000
-     *
-     * @param item WU Item object
-     * @return int value, how many seed to move into the seedBarrel for a supply action.
-     */
-    static int decodeSupplyQuantity(Item item) {
-        return (item.getData1() >>> 16) & 0xFFF;
-    }
-
-    /**
-     * Retrieve custom serialized data from the data1 column of the ITEMDATA table. Custom defined by the mask: 0x0000FF00.
-     *
-     * @param item WU Item object
-     * @return int value, an identifier for Wrap.Crop for the seed type in barrel.
-     */
-    public static int decodeContainedSeed(Item item) {
-        int id = (item.getData1() >>> 8) & 0xFF;
-        if (id > Crops.values().length - 1)
-            return 0;
-        else
-            return id;
-    }
 }

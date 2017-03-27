@@ -22,8 +22,8 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
     ConfigureSeedBarrelQuestion(Creature responder, String title, String question, int type, long aTarget) {
         this.questionType = type;
         try {this.seedBarrel = Items.getItem(aTarget);}catch (Exception ignored){}
-        this.sowRadius = FarmBarrelMod.decodeRadius(this.seedBarrel);
-        this.supplyQuantity = FarmBarrelMod.decodeSupplyQuantity(this.seedBarrel);
+        this.sowRadius = BarrelDataHandler.decodeSowRadius(this.seedBarrel);
+        this.supplyQuantity = BarrelDataHandler.decodeSupplyQuantity(this.seedBarrel);
         sendQuestion(ModQuestions.createQuestion(responder, title, question, aTarget, this));
     }
 
@@ -48,7 +48,8 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
                 this.supplyQuantity = Integer.parseInt(answer.getProperty("supplyValue"));
             }
             if (radiusBox || supplyBox){
-                this.encodeData1();
+                BarrelDataHandler.encodeSowRadius(this.seedBarrel, this.sowRadius);
+                BarrelDataHandler.encodeSupplyQuantity(this.seedBarrel, this.supplyQuantity);
             }
         }
     }
@@ -73,11 +74,5 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
                 bml, 200, 200, 200, question.getTitle());
     }
 
-    /**
-     * Write a serialized int value into the data1 column for the ITEMDATA table. Writing values for 0xFFFF0000 part of the
-     * field's int value.
-     */
-    private void encodeData1(){
-        this.seedBarrel.setData1( (this.sowRadius << 28) + (this.supplyQuantity << 16) );
-    }
+
 }

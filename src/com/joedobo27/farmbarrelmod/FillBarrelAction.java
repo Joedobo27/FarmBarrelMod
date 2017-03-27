@@ -61,7 +61,7 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
             // do seed barrel
             int barrelQuantity = source.getWeightGrams() - 1000 == 0 ? 0 : (source.getWeightGrams() - 1000) / unitSeedWeight;
             source.setWeight(1000 + (fillQuantity * unitSeedWeight) + (barrelQuantity * unitSeedWeight), false);
-            encodeContainedSeed(source, Crops.getCropIdFromSeedTemplateId((target.getTemplateId() == ItemList.bulkItem)
+            BarrelDataHandler.encodeContainedSeed(source, Crops.getCropIdFromSeedTemplateId((target.getTemplateId() == ItemList.bulkItem)
                     ? target.getRealTemplateId() : target.getTemplateId()));
             // update the custom naming tag even if it's already of correct name.
             source.updateName();
@@ -87,12 +87,6 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
         return item.isSeed();
     }
 
-    private void encodeContainedSeed(Item seedBarrel, int cropId){
-        int preservedData = seedBarrel.getData1() & 0xFFFF0000;
-        int newCropId = cropId << 8;
-        seedBarrel.setData1(preservedData + newCropId);
-    }
-
     private static void setBulkItemWeight(Item target, int fillQuantity){
         int bulkCount = Integer.parseInt(target.getDescription().replaceAll("x",""));
         int newBulkItemCount = bulkCount - fillQuantity;
@@ -102,14 +96,14 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
 
     private static int tallyFillQuantity(Item source, Item target){
         int targetQuantity = (target.getTemplateId() == ItemList.bulkItem) ? Integer.parseInt(target.getDescription().replaceAll("x","")) : 1;
-        int fillQuantity = FarmBarrelMod.decodeSupplyQuantity(source);
+        int fillQuantity = BarrelDataHandler.decodeSupplyQuantity(source);
         int weight = (target.getTemplateId() == ItemList.bulkItem) ? target.getRealTemplate().getWeightGrams() : target.getTemplate().getWeightGrams();
         int barrelQuantity = source.getWeightGrams() == 1000 ? 0 : (source.getWeightGrams() - 1000) / weight;
         return Math.min(fillQuantity - barrelQuantity, targetQuantity - 1);
     }
 
     private static boolean hasAFailureCondition(Creature performer, Item source, Item target){
-        int seedId = FarmBarrelMod.decodeContainedSeed(source);
+        int seedId = BarrelDataHandler.decodeContainedSeed(source);
         int seedTemplateId = Crops.getSeedTemplateIdFromCropId(seedId);
         boolean barrelIsEmpty = seedId == 0;
         boolean doesContainedMatchTarget = barrelIsEmpty ||
@@ -120,7 +114,7 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
             return true;
         }
         int weight = (target.getTemplateId() == ItemList.bulkItem) ? target.getRealTemplate().getWeightGrams() : target.getTemplate().getWeightGrams();
-        int fillQuantity = FarmBarrelMod.decodeSupplyQuantity(source);
+        int fillQuantity = BarrelDataHandler.decodeSupplyQuantity(source);
         boolean canCarryFillQuantity = performer.canCarry(weight * fillQuantity);
         if (!canCarryFillQuantity){
             performer.getCommunicator().sendNormalServerMessage("You can't carry that many seeds.");
