@@ -22,8 +22,8 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
     ConfigureSeedBarrelQuestion(Creature responder, String title, String question, int type, long aTarget) {
         this.questionType = type;
         try {this.seedBarrel = Items.getItem(aTarget);}catch (Exception ignored){}
-        this.sowRadius = BarrelDataHandler.decodeSowRadius(this.seedBarrel);
-        this.supplyQuantity = BarrelDataHandler.decodeSupplyQuantity(this.seedBarrel);
+        this.sowRadius = FarmBarrelMod.decodeSowRadius(this.seedBarrel);
+        this.supplyQuantity = FarmBarrelMod.decodeSupplyQuantity(this.seedBarrel);
         sendQuestion(ModQuestions.createQuestion(responder, title, question, aTarget, this));
     }
 
@@ -48,8 +48,8 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
                 this.supplyQuantity = Integer.parseInt(answer.getProperty("supplyValue"));
             }
             if (radiusBox || supplyBox){
-                BarrelDataHandler.encodeSowRadius(this.seedBarrel, this.sowRadius);
-                BarrelDataHandler.encodeSupplyQuantity(this.seedBarrel, this.supplyQuantity);
+                FarmBarrelMod.encodeSowRadius(this.seedBarrel, this.sowRadius);
+                FarmBarrelMod.encodeSupplyQuantity(this.seedBarrel, this.supplyQuantity);
             }
         }
     }

@@ -5,7 +5,6 @@ import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
 import com.wurmonline.server.players.Player;
-import com.wurmonline.server.questions.Question;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
@@ -13,9 +12,6 @@ import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.WeakHashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import static com.joedobo27.farmbarrelmod.Wrap.Actions.*;
 
@@ -24,7 +20,6 @@ import static com.joedobo27.farmbarrelmod.Wrap.Actions.*;
  */
 public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, ActionPerformer {
 
-    private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
     private final short actionId;
     private final ActionEntry actionEntry;
 

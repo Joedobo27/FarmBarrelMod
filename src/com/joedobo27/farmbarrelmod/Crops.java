@@ -1,45 +1,88 @@
 package com.joedobo27.farmbarrelmod;
 
+import static com.wurmonline.server.items.ItemList.*;
+
 import java.util.Arrays;
 import java.util.Objects;
 
-/**
- *
- */
 public enum Crops {
-    EMPTY(0, 0, 0, 0),
-    BARLEY(1, 28, 28, 20),
-    WHEAT(2, 29, 29, 30),
-    RYE(3, 30, 30, 10),
-    OAT(4, 31, 31, 15),
-    CORN(5, 32, 32, 40),
-    PUMPKIN(6, 34, 33, 15),
-    POTATO(7, 35, 35, 4),
-    COTTON(8, 145, 144, 7),
-    WEMP(9, 317, 316, 10),
-    GARLIC(10, 356, 356, 70),
-    ONION(11, 355, 355, 60),
-    REED(12, 744, 743, 20),
-    RICE(13, 746, 746, 80),
-    STRAWBERRIES(14, 750, 362, 60),
-    CARROTS(15, 1145, 1133, 25),
-    CABBAGE(16, 1146, 1134, 35),
-    TOMATOS(17, 1147, 1135, 45),
-    SUGAR_BEET(18, 1148, 1136, 85),
-    LETTUCE(19, 1149, 1137, 55),
-    PEAS(20, 1150, 1138, 65),
-    CUCUMBER(21, 1248, 1247, 15);
+    EMPTY(-1, -1, 1-, 0, 0),
+    BARLEY(0, 28, 28, 20, 300),
+    WHEAT(1, 29, 29, 30, 300),
+    RYE(2, 30, 30, 10, 300),
+    OAT(3, 31, 31, 15, 300),
+    CORN(4, 32, 32, 40, 100),
+    PUMPKIN(5, 34, 33, 15, 100),
+    POTATO(6, 35, 35, 4, 500),
+    COTTON(7, 145, 144, 7, 100),
+    WEMP(8, 317, 316, 10, 100),
+    GARLIC(9, 356, 356, 70, 50),
+    ONION(10, 355, 355, 60, 250),
+    REED(11, 744, 743, 20, 100),
+    RICE(12, 746, 746, 80, 100),
+    STRAWBERRIES(13, 750, 362, 60, 100),
+    CARROTS(14, 1145, 1133, 25, 50),
+    CABBAGE(15, 1146, 1134, 35, 50),
+    TOMATOS(16, 1147, 1135, 45, 50),
+    SUGAR_BEET(17, 1148, 1136, 85, 50),
+    LETTUCE(18, 1149, 1137, 55, 50),
+    PEAS(19, 1150, 1138, 65, 100),
+    CUCUMBER(20, 1248, 1247, 15, 50),
+    BASIL(21, basil, basil, 10, 50),
+    BELLADONNA(22, belladonna, belladonna, 10, 50),
+    LOVAGE(23, lovage, lovage, 10, 50),
+    NETTLES(24, nettles, nettles, 10, 50),
+    OREGANO(25, oregano, oregano, 10, 50),
+    PARSLEY(26, parsley, parsley, 10, 50),
+    ROSEMARY(27, rosemary, rosemary, 10, 50),
+    SAGE(28, sage, sage, 10, 50),
+    SASSAFRAS(29, sassafras, sassafras, 10, 50),
+    THYME(30, thyme, thyme, 10, 50),
+    FENNEL(31, fennelSeeds, fennel, 10, 50),
+    MINT(32, mint, mint, 10, 100),
+    CUMIN(33, cumin, cumin, 10, 100),
+    GINGER(34, ginger, ginger, 10, 100),
+    NUTMEG(35, nutmeg, nutmeg, 10, 50),
+    PAPRIKA(36, paprikaSeeds, paprika, 10, 50),
+    TURMERIC(37, turmericSeeds, turmeric, 10, 50),
+    BLUEBERRY(38, blueberry, blueberry, 60, 100),
+    LINGONBERRY(39, lingonberry, lingonberry, 20, 100),
+    RASPBERRY(40, raspberries, raspberries, 20, 100),
+    COCOABEAN(41, cocoaBean, cocoaBean, 85, 200),
+    WOAD(42, woad, woad, 90, 50),
+    BLACK_MUSHROOM(43, mushroomBlack, mushroomBlack, 90, 400),
+    BLUE_MUSHROOM(44, mushroomBlue, mushroomBlue, 70, 800),
+    BROWN_MUSHROOM(45, mushroomBrown, mushroomBrown, 60, 600),
+    GREEN_MUSHROOM(46, mushroomGreen, mushroomGreen, 80, 400),
+    RED_MUSHROOM(47, mushroomRed, mushroomRed, 20, 100),
+    YELLOW_MUSHROOM(48, mushroomYellow, mushroomYellow, 70, 200)
+    ;
 
     private final int id;
     private final int seedTemplateId;
     private final int productTemplateId;
     private final double difficulty;
+    private final int seedGrams;
+    private static int lastUsableEntry = 20;
 
-    Crops(int id, int seedTemplateId, int productTemplateId, double difficulty) {
+    Crops(int id, int seedTemplateId, int productTemplateId, double difficulty, int seedGrams) {
         this.id = id;
         this.seedTemplateId = seedTemplateId;
         this.productTemplateId = productTemplateId;
         this.difficulty = difficulty;
+        this.seedGrams = seedGrams;
+    }
+
+
+
+    public static int getSeedGramsFromCropId(int cropId) {
+        Crops crops = Arrays.stream(values())
+                .filter(crops1 -> crops1.id == cropId)
+                .findFirst()
+                .orElse(Crops.EMPTY);
+        if (crops.id > lastUsableEntry)
+            crops = Crops.EMPTY;
+        return crops.seedGrams;
     }
 
     public int getId() {
@@ -55,6 +98,8 @@ public enum Crops {
                 .filter(crops1 -> crops1.id == cropId)
                 .findFirst()
                 .orElse(Crops.EMPTY);
+        if (crops.id > lastUsableEntry)
+            crops = Crops.EMPTY;
         return crops.name();
     }
 
@@ -63,29 +108,34 @@ public enum Crops {
                 .filter(crop -> crop.id == cropId)
                 .findFirst()
                 .orElse(Crops.EMPTY);
+        if (crops.id > lastUsableEntry)
+            crops = Crops.EMPTY;
         return crops.seedTemplateId;
     }
 
     static int getCropIdFromSeedTemplateId(int seedTemplateId) {
-        return Arrays.stream(values())
-                .filter(crops -> Objects.equals(seedTemplateId, crops.getSeedTemplateId()))
-                .mapToInt(Crops::getId)
+        int id = Arrays.stream(values())
+                .filter(crops -> Objects.equals(seedTemplateId, crops.seedTemplateId))
+                .mapToInt(crops -> crops.id)
                 .findFirst()
-                .orElse(0);
+                .orElse(-1);
+        if (id > lastUsableEntry)
+            return -1;
+        return id;
     }
 
-    static boolean templateIdIsSeed(int templateId) {
-        return Arrays.stream(values())
-                .filter(crops -> crops.seedTemplateId == templateId)
-                .count() == 1;
+    static double getCropDifficultyFromCropId(int cropId) {
+        Crops crops = Arrays.stream(values())
+                .filter(crop -> Objects.equals(cropId, crop.id))
+                .findFirst()
+                .orElse(Crops.EMPTY);
+        if (crops == EMPTY || crops.id > lastUsableEntry)
+            return -1;
+        return crops.difficulty;
     }
 
-    static int getCropDifficultyFromCropId(int cropId) {
-        return Arrays.stream(values())
-                .filter(crops -> Objects.equals(cropId, crops.getId()))
-                .mapToInt(Crops::getId)
-                .findFirst()
-                .orElse(0);
+    public static int getLastUsableEntry() {
+        return lastUsableEntry;
     }
 
     static boolean isCropId(int id) {

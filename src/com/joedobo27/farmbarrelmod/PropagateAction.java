@@ -7,7 +7,6 @@ import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.*;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
-import com.wurmonline.server.items.ItemTemplate;
 import com.wurmonline.server.players.Player;
 import com.wurmonline.server.skills.Skill;
 import com.wurmonline.server.skills.SkillList;
@@ -64,7 +63,7 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                 PropagateActionData propagateActionData;
 
                 if (counter == ACTION_START_TIME) {
-                    propagateActionData = new PropagateActionData(new Point(tileX, tileY), action, onSurface, performer, source, encodedTile);
+                    propagateActionData = new PropagateActionData(new Point(tileX, tileY, encodedTile), action, onSurface, performer, source, encodedTile);
                     actionListener.put(action, propagateActionData);
                     if (!checkRequirements(propagateActionData)) {
                         return true;
@@ -82,7 +81,7 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                 if (isEndOfTileSowing) {
                     int cropId;
                     double cropDifficulty;
-                    cropId = Crops.getCropIdFromSeedTemplateId(propagateActionData.getSeed().getRealTemplateId());
+                    cropId = Crops.getCropIdFromSeedTemplateId(propagateActionData.getSeedTemplateId());
                     cropDifficulty = Crops.getCropDifficultyFromCropId(cropId);
 
                     // skill check and use the unit time in propagateActionData as counts
@@ -94,17 +93,14 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                     // consume some stamina
 
                     // change tile to a farm tile and update all the appropriate data.
-                    /*
-                        TileData is 1111 1111 or 0xFF or byte.
-                        int tileAgeMask = 0B01110000 // 0 to 7 for base 10.
-                        boolean isFarmedMask = 0B10000000 // 0 or 1 for base 10.
-                        int cropTypeMask = 0B00001111 // 0 to 15 for base 10
-                        ...
-                        1000 0000 = 128 = isFarmedMask as true + tileAge of 0. Thus, 128 + cropId & 0xFF.
-                     */
                     // pop tile from propagateActionData and use returned value to update mesh data, H in Point is an encodedTile int.
                     Point location = propagateActionData.popSowTile();
-                    Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD.id, (byte) (128 + cropId & 0xFF));
+                    if (cropId < 15)
+                        Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD.id,
+                                encodeTileData(true, 0, cropId));
+                    else if (cropId > 14)
+                        Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD2.id,
+                                encodeTileData(true, 0, cropId));
                     Players.getInstance().sendChangedTile(location.getX(), location.getY(), onSurface, false);
                     /*
                     int worldResource = Server.getWorldResource(tilex, tiley); // worldResource is a 0xFFFF size.
@@ -112,7 +108,8 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                     int farmedChanceMask = 0B0000 0111 1111 1111 - 0 to 2047
                      */
 
-                    int resource = (int) (100.0 - farmingSkill.getKnowledge() + source.getQualityLevel() + (source.getRarity() * 20) + (action.getRarity() * 50));
+                    int resource =(int) Math.min(2048, 100.0 - farmingSkill.getKnowledge() + source.getQualityLevel() +
+                            (source.getRarity() * 20) + (action.getRarity() * 50));
                     Server.setWorldResource(location.getX(), location.getY(), resource);
                     CropTilePoller.addCropTile(location.getH(), location.getX(), location.getY(), cropId, onSurface);
                     // consume some seed volume in barrel
@@ -131,15 +128,31 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
        return false;
     }
 
+    /**
+     * TileData is 1111 1111 or 0xFF or byte.
+     * isFarmedMask = 0B10000000 // 0 or 1 for base 10.
+     * tileAgeMask = 0B01110000 // 0 to 7 for base 10.
+     * int cropTypeMask = 0B00001111 // 0 to 15 for base 10
+     *
+     * @param isFarmed boolean primitive
+     * @param tileAge int primitive
+     * @param cropId int primitive
+     * @return byte encoded value
+     */
+    private byte encodeTileData(boolean isFarmed, int tileAge, int cropId){
+        int encodedTile = 0;
+        if (isFarmed)
+            encodedTile = 0B10000000;
+        if (tileAge != 0)
+            encodedTile += (tileAge << 4);
+        encodedTile += cropId;
+        return (byte) encodedTile;
+    }
+
     private boolean checkRequirements(PropagateActionData propagateActionData) {
-        boolean noSeedWithin = Objects.equals(propagateActionData.getSeed(), null);
+        boolean noSeedWithin = FarmBarrelMod.decodeContainedSeed(propagateActionData.getBarrel()) == -1;
         if (noSeedWithin) {
             propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("The seed barrel is empty.");
-            return false;
-        }
-        ItemTemplate seedTemplate = propagateActionData.getSeed().getRealTemplate();
-        if (!propagateActionData.seedIsSeed()) {
-            propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("Only seed can be sown.");
             return false;
         }
         int sowBarrelRadius = propagateActionData.getSowBarrelRadius();
@@ -150,7 +163,7 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
             return false;
         }
         if (!propagateActionData.enoughSeedForSowing()) {
-            String seedName = seedTemplate.getName();
+            String seedName = Crops.getCropNameFromCropId(FarmBarrelMod.decodeContainedSeed(propagateActionData.getBarrel()));
             propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("You don't have enough " + seedName + " to sow a " + sowArea + ".");
             return false;
         }
