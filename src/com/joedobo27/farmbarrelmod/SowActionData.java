@@ -10,17 +10,16 @@ import com.wurmonline.server.behaviours.Terraforming;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemList;
-import com.wurmonline.server.skills.Skill;
-import com.wurmonline.server.skills.SkillList;
+import com.wurmonline.server.items.RuneUtilities;
 
-import java.math.BigDecimal;
-import java.math.MathContext;
+import static com.wurmonline.server.skills.SkillList.*;
+
 import java.util.LinkedList;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-class PropagateActionData {
+class SowActionData {
     private Creature performer;
     private Item barrel;
     private int seedTemplateId;
@@ -30,12 +29,14 @@ class PropagateActionData {
     private int unitSowTimeInterval;
     private int totalTime;
     private double modifiedKnowledge;
+    private int lastWholeUnitTime;
     private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
 
-    PropagateActionData(Point centerTile, Action action, boolean surfaced, Creature performer, Item barrel, int encodedTile) {
+    SowActionData(Point centerTile, Action action, boolean surfaced, Creature performer, Item barrel, int encodedTile) {
         this.action = action;
         this.performer = performer;
         this.barrel = barrel;
+        this.lastWholeUnitTime = 0;
 
         seedTemplateId = Crops.getSeedTemplateIdFromCropId(FarmBarrelMod.decodeContainedSeed(barrel));
         points = new LinkedList<>();
@@ -44,17 +45,24 @@ class PropagateActionData {
                         IntStream.range(centerTile.getY() - getSowBarrelRadius(), centerTile.getY() + getSowBarrelRadius() + 1)
                                 .forEach(posY -> points.add(new Point(posX, posY, encodedTile)))
                 );
-        logger.info(points.toString());
         points = points.stream()
                 .filter(value -> isTileCompatibleWithSeed(value.getX(), value.getY(), surfaced))
                 .collect(Collectors.toCollection(LinkedList::new));
-        logger.info(points.toString());
         seedCount = getSeedCount();
         totalTime = getInitialActionTime();
     }
 
+    boolean unitTimeJustTicked(float counter){
+        int unitTime = (int) Math.floor(counter / this.unitSowTimeInterval);
+        if (unitTime == this.lastWholeUnitTime){
+            this.lastWholeUnitTime = unitTime;
+            return true;
+        }
+        return false;
+    }
+
     private int getSeedCount(){
-        if (seedTemplateId == 0)
+        if (seedTemplateId == -1)
             return 0;
         int seedGrams = Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedSeed(barrel));
         if (seedGrams == 0)
@@ -77,50 +85,40 @@ class PropagateActionData {
     }
 
     boolean seedIsSeed() {
-        return seedTemplateId != 0;
+        return seedTemplateId != -1;
     }
 
+    /**
+     * It shouldn't be necessary to have a fantastic, 104woa, speed rune, 99ql, 99 skill in order to get the fastest time.
+     * Aim for just skill as getting close to shortest time and the other boosts help at lower levels but aren't needed to have
+     * the best at end game.
+     *
+     * @return int primitive, tens-of-a-second action time
+     */
     private int getInitialActionTime(){
-        Skill farmingSkill = performer.getSkills().getSkillOrLearn(SkillList.FARMING);
-        double bonus = Math.max(10, performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
-        double knowledge = farmingSkill.getKnowledge(barrel, bonus);
-        modifiedKnowledge = knowledge;
-        final float multiplier = 1.3f / Servers.localServer.getActionTimer();
-        double time = (100.0 - knowledge) * multiplier;
+        double MINIMUM_TIME = FarmBarrelMod.minimumUnitActionTime;
+        int MAX_BONUS = 10;
+        double MAX_WOA_EFFECT = 0.20;
+        double TOOL_RARITY_EFFECT = 0.1;
+        double ACTION_RARITY_EFFECT = 0.33;
+        double time;
+        modifiedKnowledge = Math.max(100.0d, performer.getSkills().getSkillOrLearn(FARMING).getKnowledge(barrel,
+                Math.max(MAX_BONUS, performer.getSkills().getSkillOrLearn(BODY_CONTROL).getKnowledge() / 5)));
+        time = Math.max(MINIMUM_TIME, (100.0 - modifiedKnowledge) * 1.3f / Servers.localServer.getActionTimer());
 
         // woa
-        if (barrel != null && barrel.getSpellSpeedBonus() > 0.0f) {
-            time = 30.0 + time * (1.0 - 0.2 * barrel.getSpellSpeedBonus() / 100.0);
-        } else {
-            time += 30.0;
-        }
+        if (barrel != null && barrel.getSpellSpeedBonus() > 0.0f)
+            time = Math.max(MINIMUM_TIME, time * (1 - (MAX_WOA_EFFECT * barrel.getSpellSpeedBonus() / 100.0)));
         //rare barrel item, 10% speed reduction per rarity level.
-        int barrelRarity = barrel.getRarity();
-        double rarityBarrelBonus = 1 - (barrelRarity == 0 ? 1 : barrelRarity * 0.1);
-        time *= rarityBarrelBonus == 0 ? 1 : rarityBarrelBonus;
+        if (barrel.getRarity() > 0)
+            time = Math.max(MINIMUM_TIME, time * (1 - (barrel.getRarity() * TOOL_RARITY_EFFECT)));
         //rare sowing action, 33% speed reduction per rarity level.
-        int actionRarity = action.getRarity();
-        double rarityActionBonus = 1 - (actionRarity == 0 ? 1 : actionRarity * 0.3);
-        time *= rarityActionBonus == 0 ? 1 : rarityActionBonus;
-
-        // In order to ease use of modulo and trigger on action.justTickedSecond() round away the one's digit in time.
-        MathContext mathContext = null;
-        if (time < 100) {
-            mathContext = new MathContext(1);
-        }
-        else if (time >= 100 && time < 1000) {
-            mathContext = new MathContext(2);
-        }
-        else if (time >= 1000 && time < 10000) {
-            mathContext = new MathContext(3);
-        }
-        BigDecimal bigDecimal = new BigDecimal(time);
-        bigDecimal = bigDecimal.round(mathContext);
-        int roundedTime = bigDecimal.intValue();
-        unitSowTimeInterval = roundedTime;
-
-        roundedTime *= getSowTileCount();
-        return Math.max(10, roundedTime);
+        if (action.getRarity() > 0)
+            time = Math.max(MINIMUM_TIME, time * (1 - (action.getRarity() * ACTION_RARITY_EFFECT)));
+        // rune effects
+        if (barrel.getSpellEffects() != null && barrel.getSpellEffects().getRuneEffect() != -10L)
+            time = Math.max(MINIMUM_TIME, time * (1 - RuneUtilities.getModifier(barrel.getSpellEffects().getRuneEffect(), RuneUtilities.ModifierEffect.ENCH_USESPEED)));
+        return (int) time;
     }
 
     int getSowTileCount() {
@@ -185,14 +183,17 @@ class PropagateActionData {
                 seedNeededTile = Tiles.Tile.TILE_DIRT.id;
         }
         boolean seedsCompatibleWithTile = seedNeededTile == Tiles.decodeType(sowMesh.getTile(posX, posY));
-        logger.info(Boolean.toString(isSeedAquatic) + ", " + Boolean.toString(isSlopeMinimal) + ", "
-                + Boolean.toString(seedsCompatibleWithTile));
         return isTileUnderWater == isSeedAquatic && isSlopeMinimal && seedsCompatibleWithTile;
     }
 
     @SuppressWarnings("ConstantConditions")
     void consumeSeed() {
-        barrel.setWeight(barrel.getWeightGrams() - Crops.getSeedGramsFromCropId(seedTemplateId), false);
+        int weight = barrel.getWeightGrams() - Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedSeed(barrel));
+        if (weight == 1000) {
+            FarmBarrelMod.encodeContainedSeed(barrel, -1);
+            barrel.updateName();
+        }
+        barrel.setWeight(weight, false);
     }
 
     int getTotalTime() {

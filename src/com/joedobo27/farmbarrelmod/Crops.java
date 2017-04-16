@@ -1,61 +1,63 @@
 package com.joedobo27.farmbarrelmod;
 
+import com.wurmonline.shared.util.MaterialUtilities;
+
 import static com.wurmonline.server.items.ItemList.*;
 
 import java.util.Arrays;
 import java.util.Objects;
 
 public enum Crops {
-    EMPTY(-1, -1, 1-, 0, 0),
-    BARLEY(0, 28, 28, 20, 300),
-    WHEAT(1, 29, 29, 30, 300),
-    RYE(2, 30, 30, 10, 300),
-    OAT(3, 31, 31, 15, 300),
-    CORN(4, 32, 32, 40, 100),
-    PUMPKIN(5, 34, 33, 15, 100),
-    POTATO(6, 35, 35, 4, 500),
-    COTTON(7, 145, 144, 7, 100),
-    WEMP(8, 317, 316, 10, 100),
-    GARLIC(9, 356, 356, 70, 50),
-    ONION(10, 355, 355, 60, 250),
-    REED(11, 744, 743, 20, 100),
-    RICE(12, 746, 746, 80, 100),
-    STRAWBERRIES(13, 750, 362, 60, 100),
-    CARROTS(14, 1145, 1133, 25, 50),
-    CABBAGE(15, 1146, 1134, 35, 50),
-    TOMATOS(16, 1147, 1135, 45, 50),
-    SUGAR_BEET(17, 1148, 1136, 85, 50),
-    LETTUCE(18, 1149, 1137, 55, 50),
-    PEAS(19, 1150, 1138, 65, 100),
-    CUCUMBER(20, 1248, 1247, 15, 50),
-    BASIL(21, basil, basil, 10, 50),
-    BELLADONNA(22, belladonna, belladonna, 10, 50),
-    LOVAGE(23, lovage, lovage, 10, 50),
-    NETTLES(24, nettles, nettles, 10, 50),
-    OREGANO(25, oregano, oregano, 10, 50),
-    PARSLEY(26, parsley, parsley, 10, 50),
-    ROSEMARY(27, rosemary, rosemary, 10, 50),
-    SAGE(28, sage, sage, 10, 50),
-    SASSAFRAS(29, sassafras, sassafras, 10, 50),
-    THYME(30, thyme, thyme, 10, 50),
-    FENNEL(31, fennelSeeds, fennel, 10, 50),
-    MINT(32, mint, mint, 10, 100),
-    CUMIN(33, cumin, cumin, 10, 100),
-    GINGER(34, ginger, ginger, 10, 100),
-    NUTMEG(35, nutmeg, nutmeg, 10, 50),
-    PAPRIKA(36, paprikaSeeds, paprika, 10, 50),
-    TURMERIC(37, turmericSeeds, turmeric, 10, 50),
-    BLUEBERRY(38, blueberry, blueberry, 60, 100),
-    LINGONBERRY(39, lingonberry, lingonberry, 20, 100),
-    RASPBERRY(40, raspberries, raspberries, 20, 100),
-    COCOABEAN(41, cocoaBean, cocoaBean, 85, 200),
-    WOAD(42, woad, woad, 90, 50),
-    BLACK_MUSHROOM(43, mushroomBlack, mushroomBlack, 90, 400),
-    BLUE_MUSHROOM(44, mushroomBlue, mushroomBlue, 70, 800),
-    BROWN_MUSHROOM(45, mushroomBrown, mushroomBrown, 60, 600),
-    GREEN_MUSHROOM(46, mushroomGreen, mushroomGreen, 80, 400),
-    RED_MUSHROOM(47, mushroomRed, mushroomRed, 20, 100),
-    YELLOW_MUSHROOM(48, mushroomYellow, mushroomYellow, 70, 200)
+    EMPTY(-1, -1, -1, 0, 0, -1, -1),
+    BARLEY(0, 28, 28, 20, 300, 5, 5),
+    WHEAT(1, 29, 29, 30, 300, 6, 6),
+    RYE(2, 30, 30, 10, 300, 3, 3),
+    OAT(3, 31, 31, 15, 300, 4, 4),
+    CORN(4, 32, 32, 40, 100, 22, 22),
+    PUMPKIN(5, 34, 33, 15, 100, 22, 22),
+    POTATO(6, 35, 35, 4, 500, 22, 22),
+    COTTON(7, 145, 144, 7, 100, 22, 17),
+    WEMP(8, 317, 316, 10, 100, 22, 22),
+    GARLIC(9, 356, 356, 70, 50, 22, 22),
+    ONION(10, 355, 355, 60, 250, 22, 22),
+    REED(11, 744, 743, 20, 100, 22, 22),
+    RICE(12, 746, 746, 80, 100, 22, 22),
+    STRAWBERRIES(13, 750, 362, 60, 100, 22, 22),
+    CARROTS(14, 1145, 1133, 25, 50, 22, 22),
+    CABBAGE(15, 1146, 1134, 35, 50, 22, 22),
+    TOMATOS(16, 1147, 1135, 45, 50, 22, 22),
+    SUGAR_BEET(17, 1148, 1136, 85, 50, 22, 22),
+    LETTUCE(18, 1149, 1137, 55, 50, 22, 22),
+    PEAS(19, 1150, 1138, 65, 100, 22, 22),
+    CUCUMBER(20, 1248, 1247, 15, 50, 22, 22),
+    BASIL(21, basil, basil, 10, 50, 22, 22),
+    BELLADONNA(22, belladonna, belladonna, 10, 50, 22, 22),
+    LOVAGE(23, lovage, lovage, 10, 50, 22, 22),
+    NETTLES(24, nettles, nettles, 10, 50, 22, 22),
+    OREGANO(25, oregano, oregano, 10, 50, 22, 22),
+    PARSLEY(26, parsley, parsley, 10, 50, 22, 22),
+    ROSEMARY(27, rosemary, rosemary, 10, 50, 22, 22),
+    SAGE(28, sage, sage, 10, 50, 22, 22),
+    SASSAFRAS(29, sassafras, sassafras, 10, 50, 22, 22),
+    THYME(30, thyme, thyme, 10, 50, 22, 22),
+    FENNEL(31, fennelSeeds, fennel, 10, 50, 22, 22),
+    MINT(32, mint, mint, 10, 100, 22, 22),
+    CUMIN(33, cumin, cumin, 10, 100, 22, 22),
+    GINGER(34, ginger, ginger, 10, 100, 22, 22),
+    NUTMEG(35, nutmeg, nutmeg, 10, 50, 22, 22),
+    PAPRIKA(36, paprikaSeeds, paprika, 10, 50, 22, 22),
+    TURMERIC(37, turmericSeeds, turmeric, 10, 50, 22, 22),
+    BLUEBERRY(38, blueberry, blueberry, 60, 100, 22, 22),
+    LINGONBERRY(39, lingonberry, lingonberry, 20, 100, 22, 22),
+    RASPBERRY(40, raspberries, raspberries, 20, 100, 22, 22),
+    COCOABEAN(41, cocoaBean, cocoaBean, 85, 200, 22, 22),
+    WOAD(42, woad, woad, 90, 50, 22, 22),
+    BLACK_MUSHROOM(43, mushroomBlack, mushroomBlack, 90, 400, 22, 22),
+    BLUE_MUSHROOM(44, mushroomBlue, mushroomBlue, 70, 800, 22, 22),
+    BROWN_MUSHROOM(45, mushroomBrown, mushroomBrown, 60, 600, 22, 22),
+    GREEN_MUSHROOM(46, mushroomGreen, mushroomGreen, 80, 400, 22, 22),
+    RED_MUSHROOM(47, mushroomRed, mushroomRed, 20, 100, 22, 22),
+    YELLOW_MUSHROOM(48, mushroomYellow, mushroomYellow, 70, 200, 22, 22),
     ;
 
     private final int id;
@@ -63,17 +65,20 @@ public enum Crops {
     private final int productTemplateId;
     private final double difficulty;
     private final int seedGrams;
+    private final byte SeedMaterial;
+    private final byte productMaterial; // see MaterialUtilities.getMaterialString(). The same numbers are used in material arg of ItemTemplateCreator.
     private static int lastUsableEntry = 20;
 
-    Crops(int id, int seedTemplateId, int productTemplateId, double difficulty, int seedGrams) {
+    Crops(int id, int seedTemplateId, int productTemplateId, double difficulty, int seedGrams, int SeedMaterial, int productMaterial) {
+
         this.id = id;
         this.seedTemplateId = seedTemplateId;
         this.productTemplateId = productTemplateId;
         this.difficulty = difficulty;
         this.seedGrams = seedGrams;
+        this.SeedMaterial = (byte) SeedMaterial;
+        this.productMaterial = (byte) productMaterial;
     }
-
-
 
     public static int getSeedGramsFromCropId(int cropId) {
         Crops crops = Arrays.stream(values())
@@ -91,6 +96,13 @@ public enum Crops {
 
     public int getSeedTemplateId() {
         return seedTemplateId;
+    }
+
+    public static Crops getCrop(int cropId){
+        return Arrays.stream(values())
+                .filter(crops1 -> crops1.id == cropId)
+                .findFirst()
+                .orElse(Crops.EMPTY);
     }
 
     public static String getCropNameFromCropId(int cropId) {
@@ -138,8 +150,8 @@ public enum Crops {
         return lastUsableEntry;
     }
 
-    static boolean isCropId(int id) {
-        return id < Crops.values().length;
+    public byte getSeedMaterial() {
+        return SeedMaterial;
     }
 
     // new Crops(0, "barley", 28, 28, "handfuls", 20.0),

@@ -2,6 +2,7 @@ package com.joedobo27.farmbarrelmod;
 
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.behaviours.ActionEntry;
+import com.wurmonline.server.behaviours.Actions;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemList;
@@ -9,7 +10,6 @@ import com.wurmonline.server.players.Player;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
-import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.util.Collections;
 import java.util.List;
@@ -18,13 +18,11 @@ import java.util.logging.Logger;
 public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
-    private final short actionId;
     private final ActionEntry actionEntry;
 
     FillBarrelAction() {
-        actionId = (short) ModActions.getNextActionId();
-        actionEntry = ActionEntry.createEntry(actionId, "Supply", "Supplying", new int[] {});
-        ModActions.registerAction(actionEntry);
+        actionEntry = Actions.actionEntrys[Actions.FILL];
+        //ActionEntry.createEntry(actionId, "Supply", "Supplying", new int[] {});
     }
 
     @Override
@@ -38,12 +36,12 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
 
     @Override
     public short getActionId(){
-        return actionId;
+        return Actions.FILL;
     }
 
     @Override
     public boolean action(Action action, Creature performer, Item source, Item target, short aActionId, float counter) {
-        if (aActionId == actionId) {
+        if (aActionId == Actions.FILL && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
             if (hasAFailureCondition(performer, source, target))
                 return true;
             if (target.getTemplateId() == ItemList.bulkItem){
@@ -59,7 +57,7 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
             source.updateName();
             return true;
         }
-        return false;
+        return ActionPerformer.super.action(action, performer, source, target, aActionId, counter);
     }
 
     private void setContainedQuality(Item source, Item target){

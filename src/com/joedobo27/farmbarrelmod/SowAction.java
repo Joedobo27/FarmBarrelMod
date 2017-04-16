@@ -14,35 +14,32 @@ import com.wurmonline.server.zones.CropTilePoller;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
-import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.joedobo27.farmbarrelmod.Wrap.Actions.*;
 
-class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
+class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
     private final short actionId;
     private final ActionEntry actionEntry;
-    private static WeakHashMap<Action, PropagateActionData> actionListener;
+    private static WeakHashMap<Action, SowActionData> actionListener;
 
-    PropagateAction(){
+    SowAction(){
         actionListener = new WeakHashMap<>();
-        actionId = (short) ModActions.getNextActionId();
-        actionEntry = ActionEntry.createEntry(actionId, "Propagate", "Propagating", new int[] {ACTION_FATIGUE.getId(), ACTION_NON_LIBILAPRIEST.getId(),
-                ACTION_MISSION.getId(), ACTION_SHOW_ON_SELECT_BAR.getId(), ACTION_ENEMY_ALWAYS.getId() });
-        ModActions.registerAction(actionEntry);
+        actionId = Actions.SOW;
+        actionEntry = Actions.actionEntrys[Actions.SOW];
+                //ActionEntry.createEntry(actionId, "Propagate", "Propagating", new int[] {ACTION_FATIGUE.getId(), ACTION_NON_LIBILAPRIEST.getId(),
+                //ACTION_MISSION.getId(), ACTION_SHOW_ON_SELECT_BAR.getId(), ACTION_ENEMY_ALWAYS.getId() });
     }
 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item source, int tileX, int tileY, boolean onSurface, int encodedTile){
         if (performer instanceof Player && source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId() &&
                 Tiles.decodeType(encodedTile) == Tiles.TILE_TYPE_DIRT){
-            //noinspection ArraysAsListWithZeroOrOneArgument
-            return Arrays.asList(actionEntry);
+            return Collections.singletonList(actionEntry);
         }else {
             return null;
         }
@@ -60,41 +57,40 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                 int time;
                 final float TIME_TO_COUNTER_DIVISOR = 10.0f;
                 final float ACTION_START_TIME = 1.0f;
-                PropagateActionData propagateActionData;
+                SowActionData sowActionData;
 
                 if (counter == ACTION_START_TIME) {
-                    propagateActionData = new PropagateActionData(new Point(tileX, tileY, encodedTile), action, onSurface, performer, source, encodedTile);
-                    actionListener.put(action, propagateActionData);
-                    if (!checkRequirements(propagateActionData)) {
+                    sowActionData = new SowActionData(new Point(tileX, tileY, encodedTile), action, onSurface, performer, source, encodedTile);
+                    actionListener.put(action, sowActionData);
+                    if (!checkRequirements(sowActionData)) {
                         return true;
                     }
                     performer.getCommunicator().sendNormalServerMessage("You start " + action.getActionEntry().getVerbString() + ".");
                     Server.getInstance().broadCastAction(performer.getName() + " starts to " + action.getActionString() + ".", performer, 5);
-                    action.setTimeLeft(propagateActionData.getTotalTime());
-                    performer.sendActionControl(action.getActionEntry().getVerbString(), true, propagateActionData.getTotalTime());
+                    action.setTimeLeft(sowActionData.getTotalTime());
+                    performer.sendActionControl(action.getActionEntry().getVerbString(), true, sowActionData.getTotalTime());
                     return false;
                 }
                 time = action.getTimeLeft();
-                propagateActionData = actionListener.get(action);
-                boolean isEndOfTileSowing = action.justTickedSecond() &&
-                        (int)counter % (int)(propagateActionData.getUnitSowTimeInterval() / TIME_TO_COUNTER_DIVISOR) == 0;
+                sowActionData = actionListener.get(action);
+                boolean isEndOfTileSowing = sowActionData.unitTimeJustTicked(counter);
                 if (isEndOfTileSowing) {
                     int cropId;
                     double cropDifficulty;
-                    cropId = Crops.getCropIdFromSeedTemplateId(propagateActionData.getSeedTemplateId());
+                    cropId = Crops.getCropIdFromSeedTemplateId(sowActionData.getSeedTemplateId());
                     cropDifficulty = Crops.getCropDifficultyFromCropId(cropId);
 
-                    // skill check and use the unit time in propagateActionData as counts
+                    // skill check and use the unit time in sowActionData as counts
                     Skill farmingSkill = performer.getSkills().getSkillOrLearn(SkillList.FARMING);
                     double bonus = Math.max(10, performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
-                    farmingSkill.skillCheck(cropDifficulty, bonus, false, propagateActionData.getUnitSowTimeInterval() / TIME_TO_COUNTER_DIVISOR);
+                    farmingSkill.skillCheck(cropDifficulty, bonus, false, sowActionData.getUnitSowTimeInterval() / TIME_TO_COUNTER_DIVISOR);
                     // damage barrel
 
                     // consume some stamina
 
                     // change tile to a farm tile and update all the appropriate data.
-                    // pop tile from propagateActionData and use returned value to update mesh data, H in Point is an encodedTile int.
-                    Point location = propagateActionData.popSowTile();
+                    // pop tile from sowActionData and use returned value to update mesh data, H in Point is an encodedTile int.
+                    Point location = sowActionData.popSowTile();
                     if (cropId < 15)
                         Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD.id,
                                 encodeTileData(true, 0, cropId));
@@ -113,11 +109,12 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                     Server.setWorldResource(location.getX(), location.getY(), resource);
                     CropTilePoller.addCropTile(location.getH(), location.getX(), location.getY(), cropId, onSurface);
                     // consume some seed volume in barrel
-                    propagateActionData.consumeSeed();
+                    sowActionData.consumeSeed();
 
                 }
                 if (counter > time / TIME_TO_COUNTER_DIVISOR) {
-                    logger.log(Level.INFO, "counter > time: true");
+                    performer.getCommunicator().sendNormalServerMessage("You finish " + action.getActionEntry().getVerbString() + ".");
+                    Server.getInstance().broadCastAction(performer.getName() + " finishes " + action.getActionString() + ".", performer, 5);
                     return true;
                 }
             }catch (Exception e) {
@@ -125,7 +122,7 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
                 return true;
             }
         }
-       return false;
+        return ActionPerformer.super.action(action, performer, source, tileX, tileY, onSurface, heightOffset, encodedTile, aActionId, counter);
     }
 
     /**
@@ -149,13 +146,16 @@ class PropagateAction implements ModAction, BehaviourProvider, ActionPerformer {
         return (byte) encodedTile;
     }
 
-    private boolean checkRequirements(PropagateActionData propagateActionData) {
+    private boolean checkRequirements(SowActionData propagateActionData) {
+        final double EQUIVALENT_100 = 99.99999615;
         boolean noSeedWithin = FarmBarrelMod.decodeContainedSeed(propagateActionData.getBarrel()) == -1;
         if (noSeedWithin) {
             propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("The seed barrel is empty.");
             return false;
         }
-        int sowBarrelRadius = propagateActionData.getSowBarrelRadius();
+        double sowBarrelRadius = propagateActionData.getSowBarrelRadius();
+        if (sowBarrelRadius == 100)
+            sowBarrelRadius = EQUIVALENT_100;
         String sowArea = propagateActionData.getSowDimension() + " by " + propagateActionData.getSowDimension() + " area";
         boolean farmSkillNotEnoughForBarrelRadius = getMaxRadiusFromFarmSkill(propagateActionData.getPerformer()) < sowBarrelRadius;
         if (farmSkillNotEnoughForBarrelRadius){
