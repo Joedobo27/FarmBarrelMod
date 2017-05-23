@@ -7,17 +7,20 @@ import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.*;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
-import com.wurmonline.server.players.Player;
+import com.wurmonline.server.items.NoSuchTemplateException;
 import com.wurmonline.server.skills.Skill;
 import com.wurmonline.server.skills.SkillList;
 import com.wurmonline.server.zones.CropTilePoller;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
+import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static com.joedobo27.farmbarrelmod.Wrap.Actions.*;
 
 
 class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
@@ -27,18 +30,20 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
     private final ActionEntry actionEntry;
     private static WeakHashMap<Action, SowActionData> actionListener;
 
+
     SowAction(){
         actionListener = new WeakHashMap<>();
-        actionId = Actions.SOW;
-        actionEntry = Actions.actionEntrys[Actions.SOW];
-                //ActionEntry.createEntry(actionId, "Propagate", "Propagating", new int[] {ACTION_FATIGUE.getId(), ACTION_NON_LIBILAPRIEST.getId(),
-                //ACTION_MISSION.getId(), ACTION_SHOW_ON_SELECT_BAR.getId(), ACTION_ENEMY_ALWAYS.getId() });
+        actionId = (short) ModActions.getNextActionId();
+        actionEntry = ActionEntry.createEntry(actionId, "Sow", "sowing", new int[] {ACTION_FATIGUE.getId(),
+                ACTION_NON_LIBILAPRIEST.getId(), ACTION_MISSION.getId(), ACTION_ENEMY_ALWAYS.getId() });
+        ModActions.registerAction(actionEntry);
     }
 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item source, int tileX, int tileY, boolean onSurface, int encodedTile){
-        if (performer instanceof Player && source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId() &&
-                Tiles.decodeType(encodedTile) == Tiles.TILE_TYPE_DIRT){
+        if (source != null && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId() &&
+                (Tiles.decodeType(encodedTile) == Tiles.TILE_TYPE_DIRT || TileUtilities.isFarmTile(encodedTile)) &&
+                TileUtilities.performerIsWithinDistance(performer, tileX, tileY, 2)){
             return Collections.singletonList(actionEntry);
         }else {
             return null;
@@ -52,7 +57,8 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     @Override
     public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface, int heightOffset, int encodedTile, short aActionId, float counter) {
-        if (aActionId == actionId && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
+        if (aActionId == actionId && source.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId() &&
+                TileUtilities.performerIsWithinDistance(performer, tileX, tileY, 2)) {
             try {
                 int time;
                 final float TIME_TO_COUNTER_DIVISOR = 10.0f;
@@ -62,7 +68,7 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
                 if (counter == ACTION_START_TIME) {
                     sowActionData = new SowActionData(new Point(tileX, tileY, encodedTile), action, onSurface, performer, source, encodedTile);
                     actionListener.put(action, sowActionData);
-                    if (!checkRequirements(sowActionData)) {
+                    if (hasAFailureCondition(sowActionData)) {
                         return true;
                     }
                     performer.getCommunicator().sendNormalServerMessage("You start " + action.getActionEntry().getVerbString() + ".");
@@ -74,7 +80,12 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
                 time = action.getTimeLeft();
                 sowActionData = actionListener.get(action);
                 boolean isEndOfTileSowing = sowActionData.unitTimeJustTicked(counter);
-                if (isEndOfTileSowing) {
+                boolean timeLeft = counter - 1 < time / TIME_TO_COUNTER_DIVISOR;
+                boolean tilesLeft = sowActionData.getPoints().size() > 0;
+                if (isEndOfTileSowing && timeLeft && tilesLeft) {
+                    if (hasAFailureCondition(sowActionData)) {
+                        return true;
+                    }
                     int cropId;
                     double cropDifficulty;
                     cropId = Crops.getCropIdFromSeedTemplateId(sowActionData.getSeedTemplateId());
@@ -83,36 +94,30 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
                     // skill check and use the unit time in sowActionData as counts
                     Skill farmingSkill = performer.getSkills().getSkillOrLearn(SkillList.FARMING);
                     double bonus = Math.max(10, performer.getSkills().getSkillOrLearn(SkillList.BODY_CONTROL).getKnowledge() / 5);
-                    farmingSkill.skillCheck(cropDifficulty, bonus, false, sowActionData.getUnitSowTimeInterval() / TIME_TO_COUNTER_DIVISOR);
+                    farmingSkill.skillCheck(cropDifficulty, bonus, false, (float)(sowActionData.getUnitSowTimeInterval() / TIME_TO_COUNTER_DIVISOR));
                     // damage barrel
-
+                    source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
                     // consume some stamina
-
+                    performer.getStatus().modifyStamina(-2000.0f);
                     // change tile to a farm tile and update all the appropriate data.
                     // pop tile from sowActionData and use returned value to update mesh data, H in Point is an encodedTile int.
                     Point location = sowActionData.popSowTile();
-                    if (cropId < 15)
+                    if (cropId <= 15)
                         Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD.id,
-                                encodeTileData(true, 0, cropId));
-                    else if (cropId > 14)
+                                TileUtilities.encodeSurfaceFarmTileData(true, 0, cropId));
+                    else if (cropId > 15)
                         Server.setSurfaceTile(location.getX(), location.getY(),Tiles.decodeHeight(location.getH()), Tiles.Tile.TILE_FIELD2.id,
-                                encodeTileData(true, 0, cropId));
+                                TileUtilities.encodeSurfaceFarmTileData(true, 0, cropId));
                     Players.getInstance().sendChangedTile(location.getX(), location.getY(), onSurface, false);
-                    /*
-                    int worldResource = Server.getWorldResource(tilex, tiley); // worldResource is a 0xFFFF size.
-                    int farmedCountMask = 0B1111 1000 0000 0000 - 0 to 248 tho it should never exceed 5.
-                    int farmedChanceMask = 0B0000 0111 1111 1111 - 0 to 2047
-                     */
-
-                    int resource =(int) Math.min(2048, 100.0 - farmingSkill.getKnowledge() + source.getQualityLevel() +
-                            (source.getRarity() * 20) + (action.getRarity() * 50));
+                    int resource = TileUtilities.encodeResourceFarmTileData(0, (int)Math.min(2047, 100.0 - farmingSkill.getKnowledge() +
+                            source.getQualityLevel() +(source.getRarity() * 20) + (action.getRarity() * 50)));
                     Server.setWorldResource(location.getX(), location.getY(), resource);
                     CropTilePoller.addCropTile(location.getH(), location.getX(), location.getY(), cropId, onSurface);
                     // consume some seed volume in barrel
                     sowActionData.consumeSeed();
 
                 }
-                if (counter > time / TIME_TO_COUNTER_DIVISOR) {
+                if (counter - 1 >= (time / TIME_TO_COUNTER_DIVISOR)) {
                     performer.getCommunicator().sendNormalServerMessage("You finish " + action.getActionEntry().getVerbString() + ".");
                     Server.getInstance().broadCastAction(performer.getName() + " finishes " + action.getActionString() + ".", performer, 5);
                     return true;
@@ -122,63 +127,50 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
                 return true;
             }
         }
-        return ActionPerformer.super.action(action, performer, source, tileX, tileY, onSurface, heightOffset, encodedTile, aActionId, counter);
+        return false;
     }
 
-    /**
-     * TileData is 1111 1111 or 0xFF or byte.
-     * isFarmedMask = 0B10000000 // 0 or 1 for base 10.
-     * tileAgeMask = 0B01110000 // 0 to 7 for base 10.
-     * int cropTypeMask = 0B00001111 // 0 to 15 for base 10
-     *
-     * @param isFarmed boolean primitive
-     * @param tileAge int primitive
-     * @param cropId int primitive
-     * @return byte encoded value
-     */
-    private byte encodeTileData(boolean isFarmed, int tileAge, int cropId){
-        int encodedTile = 0;
-        if (isFarmed)
-            encodedTile = 0B10000000;
-        if (tileAge != 0)
-            encodedTile += (tileAge << 4);
-        encodedTile += cropId;
-        return (byte) encodedTile;
-    }
-
-    private boolean checkRequirements(SowActionData propagateActionData) {
-        final double EQUIVALENT_100 = 99.99999615;
-        boolean noSeedWithin = FarmBarrelMod.decodeContainedSeed(propagateActionData.getBarrel()) == -1;
+    private boolean hasAFailureCondition(SowActionData sowActionData) {
+        boolean noSeedWithin = FarmBarrelMod.decodeContainedCropId(sowActionData.getBarrel()) == Crops.EMPTY.getId();
         if (noSeedWithin) {
-            propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("The seed barrel is empty.");
-            return false;
+            sowActionData.getPerformer().getCommunicator().sendNormalServerMessage("The seed barrel is empty.");
+            return true;
         }
-        double sowBarrelRadius = propagateActionData.getSowBarrelRadius();
-        if (sowBarrelRadius == 100)
-            sowBarrelRadius = EQUIVALENT_100;
-        String sowArea = propagateActionData.getSowDimension() + " by " + propagateActionData.getSowDimension() + " area";
-        boolean farmSkillNotEnoughForBarrelRadius = getMaxRadiusFromFarmSkill(propagateActionData.getPerformer()) < sowBarrelRadius;
-        if (farmSkillNotEnoughForBarrelRadius){
-            propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage( "You don't have enough farming skill to sow a " + sowArea + ".");
-            return false;
-        }
-        if (!propagateActionData.enoughSeedForSowing()) {
-            String seedName = Crops.getCropNameFromCropId(FarmBarrelMod.decodeContainedSeed(propagateActionData.getBarrel()));
-            propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("You don't have enough " + seedName + " to sow a " + sowArea + ".");
-            return false;
-        }
-        if (propagateActionData.getSowTileCount() < 1) {
-            propagateActionData.getPerformer().getCommunicator().sendNormalServerMessage("The " + sowArea + " needs at least one tile that can be sown");
-            return false;
+        boolean contentsNotSeed = !FarmBarrelMod.decodeIsSeed(sowActionData.getBarrel());
+        if (contentsNotSeed) {
+            sowActionData.getPerformer().getCommunicator().sendNormalServerMessage("Only seeds can be sown and the barrel has something" +
+                    " which isn't a seed.");
+            return true;
         }
 
-        return true;
+        double sowBarrelRadius = sowActionData.getSowBarrelRadius();
+        String sowArea = sowActionData.getSowDimension() + " by " + sowActionData.getSowDimension() + " area";
+        boolean farmSkillNotEnoughForBarrelRadius = getMaxRadiusFromFarmSkill(sowActionData.getPerformer()) < sowBarrelRadius;
+        if (farmSkillNotEnoughForBarrelRadius){
+            sowActionData.getPerformer().getCommunicator().sendNormalServerMessage( "You don't have enough farming skill to sow a " + sowArea + ".");
+            return true;
+        }
+        if (!sowActionData.enoughSeedForSowing()) {
+            String seedName = "ERROR";
+            try {
+                seedName = Crops.getCropNameFromCropId(FarmBarrelMod.decodeContainedCropId(sowActionData.getBarrel()),
+                        FarmBarrelMod.decodeIsSeed(sowActionData.getBarrel()));
+            }catch (NoSuchTemplateException | CropsException ignored){}
+            sowActionData.getPerformer().getCommunicator().sendNormalServerMessage("You don't have enough " + seedName + " to sow a " + sowArea + ".");
+            return true;
+        }
+        if (sowActionData.getSowTileCount() < 1) {
+            sowActionData.getPerformer().getCommunicator().sendNormalServerMessage("The " + sowArea + " needs at least one tile that can be sown");
+            return true;
+        }
+
+        return false;
     }
 
     private static int getMaxRadiusFromFarmSkill(Creature performer) {
         double farmingLevel = performer.getSkills().getSkillOrLearn(SkillList.FARMING).getKnowledge();
         ArrayList<Integer> sowRadius = FarmBarrelMod.getSowRadius();
-        ArrayList<Integer> skillUnlockPoints = FarmBarrelMod.getSkillUnlockPoints();
+        ArrayList<Double> skillUnlockPoints = FarmBarrelMod.getSkillUnlockPoints();
 
         int maxIndex = skillUnlockPoints.size() - 1;
         for (int i = 0; i <= maxIndex; i++) {

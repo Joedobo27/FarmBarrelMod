@@ -24,8 +24,8 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
     private final ActionEntry actionEntry;
 
     ConfigureSeedBarrelAction() {
-        actionId = (short) ModActions.getNextActionId();
-        actionEntry = ActionEntry.createEntry(actionId, "Configure", "Configuring", new int[] {ACTION_NON_LIBILAPRIEST.getId()});
+        this.actionId = (short) ModActions.getNextActionId();
+        this.actionEntry = ActionEntry.createEntry(this.actionId, "Configure", "Configuring", new int[] {ACTION_NON_LIBILAPRIEST.getId()});
         ModActions.registerAction(actionEntry);
     }
 
@@ -37,7 +37,7 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item subject, Item target) {
         if (performer instanceof Player && target.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
-            return Collections.singletonList(actionEntry);
+            return Collections.singletonList(this.actionEntry);
         } else {
             return null;
         }
@@ -45,12 +45,12 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
 
     @Override
     public short getActionId() {
-        return actionId;
+        return this.actionId;
     }
 
     @Override
     public boolean action(Action action, Creature performer, Item source, Item target, short num, float counter) {
-        if (num == actionId) {
+        if (num == this.actionId) {
             new ConfigureSeedBarrelQuestion(
                     performer, "Configure Barrel", "Configure the barrel with.", 501, target.getWurmId());
             return true;

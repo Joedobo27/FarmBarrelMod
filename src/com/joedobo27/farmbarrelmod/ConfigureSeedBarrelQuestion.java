@@ -34,6 +34,7 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
 
     @Override
     public void answer(Question question, Properties answer) {
+        final int MAX_SUPPLY = 2047;
         if (question.getType() == 0) {
             logger.log(Level.INFO, "Received answer for a question with NOQUESTION.");
             return;
@@ -48,8 +49,13 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
                 this.supplyQuantity = Integer.parseInt(answer.getProperty("supplyValue"));
             }
             if (radiusBox || supplyBox){
+                if (this.seedBarrel.getData1() == -1){
+                    FarmBarrelMod.encodeIsSeed(this.seedBarrel, false);
+                    FarmBarrelMod.encodeContainedQuality(this.seedBarrel, 0);
+                    FarmBarrelMod.encodeContainedCropId(this.seedBarrel, Crops.EMPTY.getId());
+                }
                 FarmBarrelMod.encodeSowRadius(this.seedBarrel, this.sowRadius);
-                FarmBarrelMod.encodeSupplyQuantity(this.seedBarrel, this.supplyQuantity);
+                FarmBarrelMod.encodeSupplyQuantity(this.seedBarrel, Math.min(MAX_SUPPLY, this.supplyQuantity));
             }
         }
     }
@@ -59,13 +65,13 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
         BmlForm bmlForm = new BmlForm(question.getTitle(), 300, 150);
         bmlForm.addHidden("id", Integer.toString(question.getId()));
         bmlForm.beginTable(3, 3,
-                "label{text=\"\"};text{type=\"bold\";text=\"Input\"};text{type=\"bold\";text=\"Current setting.\"};");
+                "label{text=\" \"};text{type=\"bold\";text=\"Input\"};text{width=\"100\";type=\"bold\";text=\"Current setting.\"};");
         bmlForm.addCheckBox("radiusBox", false);
-        bmlForm.addInput("radiusValue", Integer.toString(this.sowRadius), 50);
-        bmlForm.addLabel(String.format("radiusValue of %1$s.", Integer.toString(this.sowRadius)));
+        bmlForm.addInput("radiusValue", Integer.toString(this.sowRadius), 20);
+        bmlForm.addLabel(String.format("radiusValue of %1$s.            ", Integer.toString(this.sowRadius)));
         bmlForm.addCheckBox("supplyBox", false);
-        bmlForm.addInput("supplyValue", Integer.toString(this.supplyQuantity), 50);
-        bmlForm.addLabel(String.format("supply value of %1$s.", Integer.toString(this.supplyQuantity)));
+        bmlForm.addInput("supplyValue", Integer.toString(this.supplyQuantity), 20);
+        bmlForm.addLabel(String.format("supply value of %1$s. Max 2047.", Integer.toString(this.supplyQuantity)));
         bmlForm.endTable();
         bmlForm.addButton("Send", "submit");
         String bml = bmlForm.toString();

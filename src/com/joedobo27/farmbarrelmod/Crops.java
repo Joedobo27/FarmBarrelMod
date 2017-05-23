@@ -1,14 +1,11 @@
 package com.joedobo27.farmbarrelmod;
 
-import com.wurmonline.shared.util.MaterialUtilities;
-
-import static com.wurmonline.server.items.ItemList.*;
+import com.wurmonline.server.items.*;
 
 import java.util.Arrays;
 import java.util.Objects;
 
 public enum Crops {
-    EMPTY(-1, -1, -1, 0, 0, -1, -1),
     BARLEY(0, 28, 28, 20, 300, 5, 5),
     WHEAT(1, 29, 29, 30, 300, 6, 6),
     RYE(2, 30, 30, 10, 300, 3, 3),
@@ -30,6 +27,8 @@ public enum Crops {
     LETTUCE(18, 1149, 1137, 55, 50, 22, 22),
     PEAS(19, 1150, 1138, 65, 100, 22, 22),
     CUCUMBER(20, 1248, 1247, 15, 50, 22, 22),
+    EMPTY(21, -1, -1, 0, 0, -1, -1);
+    /*
     BASIL(21, basil, basil, 10, 50, 22, 22),
     BELLADONNA(22, belladonna, belladonna, 10, 50, 22, 22),
     LOVAGE(23, lovage, lovage, 10, 50, 22, 22),
@@ -58,7 +57,7 @@ public enum Crops {
     GREEN_MUSHROOM(46, mushroomGreen, mushroomGreen, 80, 400, 22, 22),
     RED_MUSHROOM(47, mushroomRed, mushroomRed, 20, 100, 22, 22),
     YELLOW_MUSHROOM(48, mushroomYellow, mushroomYellow, 70, 200, 22, 22),
-    ;
+    */
 
     private final int id;
     private final int seedTemplateId;
@@ -67,7 +66,8 @@ public enum Crops {
     private final int seedGrams;
     private final byte SeedMaterial;
     private final byte productMaterial; // see MaterialUtilities.getMaterialString(). The same numbers are used in material arg of ItemTemplateCreator.
-    private static int lastUsableEntry = 20;
+    private static int lastUsableEntry = 21;
+    private static Crops instance;
 
     Crops(int id, int seedTemplateId, int productTemplateId, double difficulty, int seedGrams, int SeedMaterial, int productMaterial) {
 
@@ -85,7 +85,7 @@ public enum Crops {
                 .filter(crops1 -> crops1.id == cropId)
                 .findFirst()
                 .orElse(Crops.EMPTY);
-        if (crops.id > lastUsableEntry)
+        if (crops.id >= lastUsableEntry)
             crops = Crops.EMPTY;
         return crops.seedGrams;
     }
@@ -95,8 +95,10 @@ public enum Crops {
     }
 
     public int getSeedTemplateId() {
-        return seedTemplateId;
+        return this.seedTemplateId;
     }
+
+    public int getProductTemplateId() {return this.productTemplateId;}
 
     public static Crops getCrop(int cropId){
         return Arrays.stream(values())
@@ -105,34 +107,96 @@ public enum Crops {
                 .orElse(Crops.EMPTY);
     }
 
-    public static String getCropNameFromCropId(int cropId) {
+    public static String getCropNameFromCropId(int cropId, boolean isSeed) throws NoSuchTemplateException {
         Crops crops = Arrays.stream(values())
                 .filter(crops1 -> crops1.id == cropId)
                 .findFirst()
                 .orElse(Crops.EMPTY);
-        if (crops.id > lastUsableEntry)
+        if (crops.id >= lastUsableEntry)
             crops = Crops.EMPTY;
-        return crops.name();
+        ItemTemplate cropTemplate = null;
+        ItemTemplate seedTemplate = null;
+
+        cropTemplate = ItemTemplateFactory.getInstance().getTemplate(Crops.getProductTemplateIdFromCropId(crops.id));
+        seedTemplate = ItemTemplateFactory.getInstance().getTemplate(Crops.getSeedTemplateIdFromCropId(crops.id));
+
+        if (isSeed) {
+            return seedTemplate.getName();
+        }
+        return cropTemplate.getName();
+    }
+
+    static ItemTemplate getSeedTemplateFromProductTemplate(ItemTemplate productTemplate) throws NoSuchTemplateException, CropsException {
+        if (productTemplate.getTemplateId() == ItemList.bulkItem)
+            throw new CropsException("arg requires getRealTemplate() preparation.");
+        Crops crop = Arrays.stream(values())
+                .filter(crops -> crops.productTemplateId == productTemplate.getTemplateId())
+                .findFirst()
+                .orElseThrow(() -> new CropsException("No matching productTemplateId found."));
+        if (crop.id >= lastUsableEntry)
+            throw new CropsException("Crops.id found isn't supported.");
+        return ItemTemplateFactory.getInstance().getTemplate(crop.getSeedTemplateId());
     }
 
     static int getSeedTemplateIdFromCropId(int cropId) {
-        Crops crops = Arrays.stream(values())
-                .filter(crop -> crop.id == cropId)
+        Crops crop = Arrays.stream(values())
+                .filter(crops -> crops.id == cropId)
                 .findFirst()
                 .orElse(Crops.EMPTY);
-        if (crops.id > lastUsableEntry)
-            crops = Crops.EMPTY;
-        return crops.seedTemplateId;
+        if (crop.id >= lastUsableEntry)
+            crop = Crops.EMPTY;
+        return crop.seedTemplateId;
     }
 
-    static int getCropIdFromSeedTemplateId(int seedTemplateId) {
+    static ItemTemplate getSeedTemplateFromCropId(int cropId) throws NoSuchTemplateException, CropsException {
+        Crops crop = Arrays.stream(values())
+                .filter(crops -> crops.id == cropId)
+                .findFirst()
+                .orElseThrow(() -> new CropsException("cropId isn't valid so no ItemTemplate can be found."));
+        if (crop.id >= lastUsableEntry)
+            throw new CropsException("Crops.id found isn't supported.");
+        return ItemTemplateFactory.getInstance().getTemplate(crop.getSeedTemplateId());
+    }
+
+    static int getProductTemplateIdFromCropId(int cropId) {
+        Crops crop = Arrays.stream(values())
+                .filter(crops -> crops.id == cropId)
+                .findFirst()
+                .orElse(Crops.EMPTY);
+        if (crop.id >= lastUsableEntry)
+            crop = Crops.EMPTY;
+        return crop.productTemplateId;
+    }
+
+    static ItemTemplate getProductTemplateFromCropId(int cropId) throws NoSuchTemplateException, CropsException {
+        Crops crop = Arrays.stream(values())
+                .filter(crops -> crops.id == cropId)
+                .findFirst()
+                .orElseThrow(() -> new CropsException("cropId isn't valid so no ItemTemplate can be found."));
+        if (crop.id >= lastUsableEntry)
+            throw new CropsException("Crops.id found isn't supported.");
+        return ItemTemplateFactory.getInstance().getTemplate(crop.getProductTemplateId());
+    }
+
+    static int getCropIdFromSeedTemplateId(int aSeedTemplateId) {
         int id = Arrays.stream(values())
-                .filter(crops -> Objects.equals(seedTemplateId, crops.seedTemplateId))
+                .filter(crops -> Objects.equals(crops.seedTemplateId, aSeedTemplateId))
                 .mapToInt(crops -> crops.id)
                 .findFirst()
-                .orElse(-1);
+                .orElse(lastUsableEntry);
         if (id > lastUsableEntry)
-            return -1;
+            return lastUsableEntry;
+        return id;
+    }
+
+    static int getCropIdFromProductTemplateId(int aProductTemplateId) {
+        int id = Arrays.stream(values())
+                .filter(crops -> Objects.equals(crops.productTemplateId, aProductTemplateId))
+                .mapToInt(crops -> crops.id)
+                .findFirst()
+                .orElse(lastUsableEntry);
+        if (id > lastUsableEntry)
+            return lastUsableEntry;
         return id;
     }
 
@@ -141,7 +205,7 @@ public enum Crops {
                 .filter(crop -> Objects.equals(cropId, crop.id))
                 .findFirst()
                 .orElse(Crops.EMPTY);
-        if (crops == EMPTY || crops.id > lastUsableEntry)
+        if (crops == EMPTY || crops.id >= lastUsableEntry)
             return -1;
         return crops.difficulty;
     }
@@ -175,4 +239,6 @@ public enum Crops {
     // new Crops(18, "lettuce", 1149, 1137, "", 55.0),
     // new Crops(19, "peas", 1150, 1138, "handfuls", 65.0),
     // new Crops(20, "cucumber", 1248, 1247, "", 15.0) };
+
+
 }

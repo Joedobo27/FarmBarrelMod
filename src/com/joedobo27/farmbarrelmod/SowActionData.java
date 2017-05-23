@@ -1,21 +1,20 @@
 package com.joedobo27.farmbarrelmod;
 
+import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.MeshIO;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.server.Point;
 import com.wurmonline.server.Server;
-import com.wurmonline.server.Servers;
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.behaviours.Terraforming;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemList;
-import com.wurmonline.server.items.RuneUtilities;
 
 import static com.wurmonline.server.skills.SkillList.*;
 
+import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -26,11 +25,9 @@ class SowActionData {
     private int seedCount;
     private LinkedList<Point> points;  // H is an encodedTile int.
     private Action action;
-    private int unitSowTimeInterval;
+    private double unitSowTimeInterval;
     private int totalTime;
-    private double modifiedKnowledge;
     private int lastWholeUnitTime;
-    private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
 
     SowActionData(Point centerTile, Action action, boolean surfaced, Creature performer, Item barrel, int encodedTile) {
         this.action = action;
@@ -38,7 +35,7 @@ class SowActionData {
         this.barrel = barrel;
         this.lastWholeUnitTime = 0;
 
-        seedTemplateId = Crops.getSeedTemplateIdFromCropId(FarmBarrelMod.decodeContainedSeed(barrel));
+        seedTemplateId = Crops.getSeedTemplateIdFromCropId(FarmBarrelMod.decodeContainedCropId(barrel));
         points = new LinkedList<>();
         IntStream.range(centerTile.getX() - getSowBarrelRadius(), centerTile.getX() + getSowBarrelRadius() + 1)
                 .forEach( posX ->
@@ -49,12 +46,13 @@ class SowActionData {
                 .filter(value -> isTileCompatibleWithSeed(value.getX(), value.getY(), surfaced))
                 .collect(Collectors.toCollection(LinkedList::new));
         seedCount = getSeedCount();
-        totalTime = getInitialActionTime();
+        unitSowTimeInterval = FarmBarrelMod.getBaseUnitActionTime(barrel, performer, action, FARMING, BODY_CONTROL);
+        totalTime = (int) Math.ceil(unitSowTimeInterval * points.size());
     }
 
     boolean unitTimeJustTicked(float counter){
-        int unitTime = (int) Math.floor(counter / this.unitSowTimeInterval);
-        if (unitTime == this.lastWholeUnitTime){
+        int unitTime = (int)(Math.floor((counter * 100) / (this.unitSowTimeInterval * 10)));
+        if (unitTime != this.lastWholeUnitTime){
             this.lastWholeUnitTime = unitTime;
             return true;
         }
@@ -64,7 +62,7 @@ class SowActionData {
     private int getSeedCount(){
         if (seedTemplateId == -1)
             return 0;
-        int seedGrams = Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedSeed(barrel));
+        int seedGrams = Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedCropId(barrel));
         if (seedGrams == 0)
             return 0;
         if (barrel.getWeightGrams() - 1000 == 0)
@@ -84,41 +82,8 @@ class SowActionData {
         return seedCount >= getSowTileCount();
     }
 
-    boolean seedIsSeed() {
+    private boolean seedIsSeed() {
         return seedTemplateId != -1;
-    }
-
-    /**
-     * It shouldn't be necessary to have a fantastic, 104woa, speed rune, 99ql, 99 skill in order to get the fastest time.
-     * Aim for just skill as getting close to shortest time and the other boosts help at lower levels but aren't needed to have
-     * the best at end game.
-     *
-     * @return int primitive, tens-of-a-second action time
-     */
-    private int getInitialActionTime(){
-        double MINIMUM_TIME = FarmBarrelMod.minimumUnitActionTime;
-        int MAX_BONUS = 10;
-        double MAX_WOA_EFFECT = 0.20;
-        double TOOL_RARITY_EFFECT = 0.1;
-        double ACTION_RARITY_EFFECT = 0.33;
-        double time;
-        modifiedKnowledge = Math.max(100.0d, performer.getSkills().getSkillOrLearn(FARMING).getKnowledge(barrel,
-                Math.max(MAX_BONUS, performer.getSkills().getSkillOrLearn(BODY_CONTROL).getKnowledge() / 5)));
-        time = Math.max(MINIMUM_TIME, (100.0 - modifiedKnowledge) * 1.3f / Servers.localServer.getActionTimer());
-
-        // woa
-        if (barrel != null && barrel.getSpellSpeedBonus() > 0.0f)
-            time = Math.max(MINIMUM_TIME, time * (1 - (MAX_WOA_EFFECT * barrel.getSpellSpeedBonus() / 100.0)));
-        //rare barrel item, 10% speed reduction per rarity level.
-        if (barrel.getRarity() > 0)
-            time = Math.max(MINIMUM_TIME, time * (1 - (barrel.getRarity() * TOOL_RARITY_EFFECT)));
-        //rare sowing action, 33% speed reduction per rarity level.
-        if (action.getRarity() > 0)
-            time = Math.max(MINIMUM_TIME, time * (1 - (action.getRarity() * ACTION_RARITY_EFFECT)));
-        // rune effects
-        if (barrel.getSpellEffects() != null && barrel.getSpellEffects().getRuneEffect() != -10L)
-            time = Math.max(MINIMUM_TIME, time * (1 - RuneUtilities.getModifier(barrel.getSpellEffects().getRuneEffect(), RuneUtilities.ModifierEffect.ENCH_USESPEED)));
-        return (int) time;
     }
 
     int getSowTileCount() {
@@ -144,18 +109,26 @@ class SowActionData {
             sowMesh = Server.caveMesh;
         }
 
-        boolean isTileUnderWater = Terraforming.isCornerUnderWater(posX, posY, surfaced);
-        boolean isSeedAquatic;
+        int minimumHeight;
+        int maxHeight;
         switch (seedTemplateId){
             case ItemList.reedSeed:
-                isSeedAquatic = true;
+                minimumHeight = -4;
+                maxHeight = -1;
                 break;
             case ItemList.rice:
-                isSeedAquatic = true;
+                minimumHeight = -4;
+                maxHeight = -1;
                 break;
             default:
-                isSeedAquatic = false;
+                minimumHeight = 1;
+                maxHeight = Short.MAX_VALUE;
         }
+        TilePos targetTilePos = TilePos.fromXY(posX, posY);
+        boolean allCornersInHeightRange = Arrays.stream(new TilePos[]{targetTilePos, targetTilePos.East(), targetTilePos.SouthEast(), targetTilePos.South()})
+                .filter(tilePos -> TileUtilities.getSurfaceHeight(tilePos) >= minimumHeight)
+                .filter(tilePos -> TileUtilities.getSurfaceHeight(tilePos) <= maxHeight)
+                .count() == 4;
 
         boolean isSlopeMinimal = Terraforming.isFlat(posX, posY, surfaced, 4);
 
@@ -183,14 +156,16 @@ class SowActionData {
                 seedNeededTile = Tiles.Tile.TILE_DIRT.id;
         }
         boolean seedsCompatibleWithTile = seedNeededTile == Tiles.decodeType(sowMesh.getTile(posX, posY));
-        return isTileUnderWater == isSeedAquatic && isSlopeMinimal && seedsCompatibleWithTile;
+        return  allCornersInHeightRange && isSlopeMinimal && seedsCompatibleWithTile;
     }
 
     @SuppressWarnings("ConstantConditions")
     void consumeSeed() {
-        int weight = barrel.getWeightGrams() - Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedSeed(barrel));
+        int weight = barrel.getWeightGrams() - Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedCropId(barrel));
         if (weight == 1000) {
-            FarmBarrelMod.encodeContainedSeed(barrel, -1);
+            FarmBarrelMod.encodeIsSeed(barrel, false);
+            FarmBarrelMod.encodeContainedCropId(barrel, Crops.EMPTY.getId());
+            FarmBarrelMod.encodeContainedQuality(barrel, 0);
             barrel.updateName();
         }
         barrel.setWeight(weight, false);
@@ -200,7 +175,7 @@ class SowActionData {
         return totalTime;
     }
 
-    int getUnitSowTimeInterval() {
+    double getUnitSowTimeInterval() {
         return unitSowTimeInterval;
     }
 
@@ -212,11 +187,11 @@ class SowActionData {
         return performer;
     }
 
-    public Action getAction() {
-        return action;
+    Item getBarrel() {
+        return barrel;
     }
 
-    public Item getBarrel() {
-        return barrel;
+    LinkedList<Point> getPoints() {
+        return points;
     }
 }
