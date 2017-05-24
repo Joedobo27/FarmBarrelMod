@@ -8,6 +8,7 @@ import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemList;
 import com.wurmonline.server.items.NoSuchTemplateException;
 import com.wurmonline.server.players.Player;
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
@@ -26,6 +27,14 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
     FillBarrelAction() {
         this.actionId = Actions.FILL;
         this.actionEntry = Actions.actionEntrys[Actions.FILL];
+        try {
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "maxRange"),
+                    8);
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "isBlockedByUseOnGroundOnly"),
+                    false);
+        }catch (Exception ignored){}
     }
 
     @Override
@@ -131,21 +140,26 @@ public class FillBarrelAction implements ModAction, BehaviourProvider, ActionPer
     }
 
     private static boolean hasAFailureCondition(Creature performer, Item barrel, Item bulkItem){
-        int seedId = FarmBarrelMod.decodeContainedCropId(barrel);
-        int seedTemplateId = Crops.getSeedTemplateIdFromCropId(seedId);
+
         if (!itemIsFarmCropOrSeed(bulkItem)){
             performer.getCommunicator().sendNormalServerMessage("The barrel can only be filled with farm seeds.");
             return true;
         }
+
         boolean targetNotBulk = bulkItem.getTemplateId() != ItemList.bulkItem;
         if (targetNotBulk) {
             performer.getCommunicator().sendNormalServerMessage("The barrel only be filled with items inside bulk containers.");
             return true;
         }
 
+        int seedId = FarmBarrelMod.decodeContainedCropId(barrel);
         boolean barrelIsEmpty = seedId == Crops.getLastUsableEntry();
         boolean doesContainedMatchTarget = barrelIsEmpty ||
-                seedTemplateId == bulkItem.getRealTemplateId();
+                Crops.getSeedTemplateIdFromCropId(seedId) == bulkItem.getRealTemplateId();
+        if (!bulkItem.getRealTemplate().isSeed()) {
+            doesContainedMatchTarget = barrelIsEmpty ||
+                    Crops.getProductTemplateIdFromCropId(seedId) == bulkItem.getRealTemplateId();
+        }
         if (!doesContainedMatchTarget){
             performer.getCommunicator().sendNormalServerMessage("The barrel can only hold one type of seed at a time.");
             return true;

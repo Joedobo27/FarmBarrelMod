@@ -206,6 +206,10 @@ public class TileUtilities {
         return (byte) encodedTile;
     }
 
+    static int getFarmTileAge(TilePos tilePos) {
+        return (getSurfaceData(tilePos) & 0B01110000) >>> 4;
+    }
+
     static int getFarmTileCropId(TilePos tilePos) {
         int toReturn = 0;
         switch (TileUtilities.getSurfaceType(tilePos)) {

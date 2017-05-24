@@ -218,6 +218,10 @@ public enum Crops {
         return SeedMaterial;
     }
 
+    public byte getProductMaterial() {
+        return productMaterial;
+    }
+
     // new Crops(0, "barley", 28, 28, "handfuls", 20.0),
     // new Crops(1, "wheat", 29, 29, "handfuls", 30.0),
     // new Crops(2, "rye", 30, 30, "handfuls", 10.0),

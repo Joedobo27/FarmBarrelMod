@@ -6,6 +6,7 @@ import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.players.Player;
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
@@ -25,6 +26,14 @@ public class EmptyBarrelAction implements ModAction, BehaviourProvider, ActionPe
         this.actionId = (short) ModActions.getNextActionId();
         this.actionEntry = ActionEntry.createEntry(actionId, "Empty", "emptying", new int[] {});
         ModActions.registerAction(actionEntry);
+        try {
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "maxRange"),
+                    8);
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "isBlockedByUseOnGroundOnly"),
+                    false);
+        }catch (Exception ignored){}
     }
 
     @Override
@@ -97,7 +106,7 @@ public class EmptyBarrelAction implements ModAction, BehaviourProvider, ActionPe
         try {seedItem = ItemFactory.createItem(
                 FarmBarrelMod.decodeIsSeed(source) ? crops.getSeedTemplateId() : crops.getProductTemplateId(),
                 FarmBarrelMod.decodeContainedQuality(source),
-                crops.getSeedMaterial(), (byte)0, null);}catch (Exception ignored){}
+                FarmBarrelMod.decodeIsSeed(source) ? crops.getSeedMaterial() : crops.getProductMaterial(), (byte)0, null);}catch (Exception ignored){}
         return seedItem;
     }
 

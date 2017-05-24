@@ -11,6 +11,7 @@ import com.wurmonline.server.items.NoSuchTemplateException;
 import com.wurmonline.server.skills.Skill;
 import com.wurmonline.server.skills.SkillList;
 import com.wurmonline.server.zones.CropTilePoller;
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
@@ -37,6 +38,14 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
         actionEntry = ActionEntry.createEntry(actionId, "Sow", "sowing", new int[] {ACTION_FATIGUE.getId(),
                 ACTION_NON_LIBILAPRIEST.getId(), ACTION_MISSION.getId(), ACTION_ENEMY_ALWAYS.getId() });
         ModActions.registerAction(actionEntry);
+        try {
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "maxRange"),
+                    8);
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "isBlockedByUseOnGroundOnly"),
+                    false);
+        }catch (Exception ignored){}
     }
 
     @Override

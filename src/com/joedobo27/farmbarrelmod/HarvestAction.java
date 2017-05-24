@@ -10,6 +10,7 @@ import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.Skill;
 import com.wurmonline.server.skills.SkillList;
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
@@ -32,6 +33,14 @@ class HarvestAction implements ModAction, BehaviourProvider, ActionPerformer {
         this.actionEntry = ActionEntry.createEntry(this.actionId, "Harvest", "harvesting", new int[] {ACTION_FATIGUE.getId(),
                 ACTION_NON_LIBILAPRIEST.getId(), ACTION_NEED_FOOD.getId(), ACTION_ENEMY_ALWAYS.getId() });
         ModActions.registerAction(actionEntry);
+        try {
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "maxRange"),
+                    8);
+            ReflectionUtil.setPrivateField(this.actionEntry,
+                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.ActionEntry"), "isBlockedByUseOnGroundOnly"),
+                    false);
+        }catch (Exception ignored){}
     }
 
     @Override
@@ -119,6 +128,13 @@ class HarvestAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     private static boolean hasAFailureCondition(Creature performer, Item barrel, int tileX, int tileY, boolean onSurface, int heightOffset, int encodedTile, short aActionId, float counter){
         TilePos farmTilePos = TilePos.fromXY(tileX, tileY);
+
+
+        boolean cropNotRipe = TileUtilities.getFarmTileAge(farmTilePos) < 5 || TileUtilities.getFarmTileAge(farmTilePos) > 6;
+        if (cropNotRipe) {
+            performer.getCommunicator().sendNormalServerMessage("The crops aren't ripe enough to harvest.");
+            return true;
+        }
         ItemTemplate cropTemplate;
         ItemTemplate seedTemplate;
         try {
