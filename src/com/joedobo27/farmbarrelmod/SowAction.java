@@ -23,7 +23,6 @@ import java.util.logging.Logger;
 
 import static com.joedobo27.farmbarrelmod.Wrap.Actions.*;
 
-
 class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
 
     private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
@@ -58,6 +57,7 @@ class SowAction implements ModAction, BehaviourProvider, ActionPerformer {
             return null;
         }
     }
+
 
     @Override
     public short getActionId(){

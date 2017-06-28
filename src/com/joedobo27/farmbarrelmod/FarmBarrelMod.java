@@ -120,8 +120,8 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
      * Insert a code block into Item.getName(Z) to handle custom naming when the seed barrel contains seeds. For example
      * name a barrel: Seed barrel [corn].
      * insert towards its end and just before this:
-     *      builder.append(this.name);
-     *      line 1211: 2044
+     *      builder.app end(this.name);
+     *      line 1232: 2123
      *
      * @throws NotFoundException JA related, forwarded
      * @throws CannotCompileException JA related, forwarded
@@ -142,7 +142,7 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
                 "com.joedobo27.farmbarrelmod.FarmBarrelMod.decodeIsSeed(this)) + \"]\";}" +
                 "";
 
-        getNameCtMethod.insertAt(1211, source);
+        getNameCtMethod.insertAt(1232, source);
     }
 
     @SuppressWarnings("WeakerAccess")
