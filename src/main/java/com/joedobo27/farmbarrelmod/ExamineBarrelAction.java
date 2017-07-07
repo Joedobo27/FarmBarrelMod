@@ -28,8 +28,6 @@ public class ExamineBarrelAction implements ModAction, ActionPerformer{
     @Override
     public boolean action(Action action, Creature performer, Item source, Item target, short num, float counter) {
         if (num == Actions.EXAMINE && target.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
-
-
             String string = target.getTemplate().getDescriptionLong();
             String s = target.getSignature();
             if (s != null && !s.isEmpty()) {
