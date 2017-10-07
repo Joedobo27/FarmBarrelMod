@@ -8,25 +8,26 @@ import com.wurmonline.server.players.Player;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
-import org.gotti.wurmunlimited.modsupport.actions.ModActions;
+import org.gotti.wurmunlimited.modsupport.questions.ModQuestions;
 
 import java.util.Collections;
 import java.util.List;
 
-import static com.joedobo27.farmbarrelmod.Wrap.Actions.*;
+import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
-/**
- *
- */
 public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, ActionPerformer {
 
-    private final short actionId;
+    private final int actionId;
     private final ActionEntry actionEntry;
 
-    ConfigureSeedBarrelAction() {
-        this.actionId = (short) ModActions.getNextActionId();
-        this.actionEntry = ActionEntry.createEntry(this.actionId, "Configure", "Configuring", new int[] {ACTION_NON_LIBILAPRIEST.getId()});
-        ModActions.registerAction(actionEntry);
+    ConfigureSeedBarrelAction(int actionId, ActionEntry actionEntry) {
+        this.actionId = actionId;
+        this.actionEntry = actionEntry;
+    }
+
+    @Override
+    public short getActionId() {
+        return (short)this.actionId;
     }
 
     @Override
@@ -36,26 +37,22 @@ public class ConfigureSeedBarrelAction implements ModAction, BehaviourProvider, 
 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item subject, Item target) {
-        if (performer instanceof Player && target.getTemplateId() == FarmBarrelMod.getSowBarrelTemplateId()) {
-            return Collections.singletonList(this.actionEntry);
-        } else {
+        if (target.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() || target.getWurmId() == -10L)
             return null;
-        }
+        return Collections.singletonList(this.actionEntry);
     }
 
     @Override
-    public short getActionId() {
-        return this.actionId;
-    }
-
-    @Override
-    public boolean action(Action action, Creature performer, Item source, Item target, short num, float counter) {
-        if (num == this.actionId) {
-            new ConfigureSeedBarrelQuestion(
-                    performer, "Configure Barrel", "Configure the barrel with.", 501, target.getWurmId());
-            return true;
-        }
-        return false;
+    public boolean action(Action action, Creature performer, Item source, Item target, short actionId, float counter) {
+        if (actionId != this.actionId || target.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
+                target.getWurmId() == -10L)
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+        FarmBarrel farmBarrel = FarmBarrel.getOrMakeFarmBarrel(target);
+        ConfigureSeedBarrelQuestion barrelQuestion = new ConfigureSeedBarrelQuestion(farmBarrel,
+                ConfigureOptions.getInstance().getConfigureBarrelQuestionId());
+        barrelQuestion.sendQuestion(ModQuestions.createQuestion(performer, "Configure Barrel", "Configure this how?",
+                target.getWurmId(), barrelQuestion));
+        return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
 
     @Override

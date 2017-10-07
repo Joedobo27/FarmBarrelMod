@@ -1,30 +1,22 @@
 package com.joedobo27.farmbarrelmod;
 
-import com.wurmonline.server.Items;
-import com.wurmonline.server.creatures.Creature;
-import com.wurmonline.server.items.Item;
 import com.wurmonline.server.questions.Question;
+import org.gotti.wurmunlimited.modsupport.bml.BmlBuilder;
+import org.gotti.wurmunlimited.modsupport.bml.TextStyle;
 import org.gotti.wurmunlimited.modsupport.questions.ModQuestion;
-import org.gotti.wurmunlimited.modsupport.questions.ModQuestions;
 
 import java.util.Properties;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import static org.gotti.wurmunlimited.modsupport.bml.BmlBuilder.*;
 
 
 public class ConfigureSeedBarrelQuestion implements ModQuestion {
-    private Item seedBarrel;
-    private int sowRadius;
-    private int supplyQuantity;
-    private int questionType;
-    private static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
+    private final FarmBarrel farmBarrel;
+    private final int questionType;
 
-    ConfigureSeedBarrelQuestion(Creature responder, String title, String question, int type, long aTarget) {
-        this.questionType = type;
-        try {this.seedBarrel = Items.getItem(aTarget);}catch (Exception ignored){}
-        this.sowRadius = FarmBarrelMod.decodeSowRadius(this.seedBarrel);
-        this.supplyQuantity = FarmBarrelMod.decodeSupplyQuantity(this.seedBarrel);
-        sendQuestion(ModQuestions.createQuestion(responder, title, question, aTarget, this));
+    ConfigureSeedBarrelQuestion(FarmBarrel farmBarrel, int questionType) {
+        this.farmBarrel = farmBarrel;
+        this.questionType = questionType;
     }
 
     @Override
@@ -34,51 +26,38 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
 
     @Override
     public void answer(Question question, Properties answer) {
-        final int MAX_SUPPLY = 2047;
         if (question.getType() == 0) {
-            logger.log(Level.INFO, "Received answer for a question with NOQUESTION.");
+            FarmBarrelMod.logger.warning( "Received answer for a question with NOQUESTION.");
             return;
         }
         if (this.getType() == question.getType()) {
-            boolean radiusBox = Boolean.parseBoolean(answer.getProperty("radiusBox"));
-            if (radiusBox) {
-                this.sowRadius = Integer.parseInt(answer.getProperty("radiusValue"));
-            }
-            boolean supplyBox = Boolean.parseBoolean(answer.getProperty("supplyBox"));
-            if (supplyBox) {
-                this.supplyQuantity = Integer.parseInt(answer.getProperty("supplyValue"));
-            }
-            if (radiusBox || supplyBox){
-                if (this.seedBarrel.getData1() == -1){
-                    FarmBarrelMod.encodeIsSeed(this.seedBarrel, false);
-                    FarmBarrelMod.encodeContainedQuality(this.seedBarrel, 0);
-                    FarmBarrelMod.encodeContainedCropId(this.seedBarrel, Crops.EMPTY.getId());
-                }
-                FarmBarrelMod.encodeSowRadius(this.seedBarrel, this.sowRadius);
-                FarmBarrelMod.encodeSupplyQuantity(this.seedBarrel, Math.min(MAX_SUPPLY, this.supplyQuantity));
+            boolean autoResow = Boolean.parseBoolean(answer.getProperty("autoResow"));
+            int sowRadius = Integer.parseInt(answer.getProperty("sowRadius"));
+            int supplyQuantity = Integer.parseInt(answer.getProperty("supplyQuantity"));
+
+            if (autoResow != this.farmBarrel.isAutoResow() || sowRadius != this.farmBarrel.getSowRadius() ||
+                    supplyQuantity != this.farmBarrel.getSupplyQuantity()) {
+                farmBarrel.configureUpdate(autoResow, sowRadius, supplyQuantity);
             }
         }
     }
 
     @Override
     public void sendQuestion(Question question) {
-        BmlForm bmlForm = new BmlForm(question.getTitle(), 300, 150);
-        bmlForm.addHidden("id", Integer.toString(question.getId()));
-        bmlForm.beginTable(3, 3,
-                "label{text=\" \"};text{type=\"bold\";text=\"Input\"};text{width=\"100\";type=\"bold\";text=\"Current setting.\"};");
-        bmlForm.addCheckBox("radiusBox", false);
-        bmlForm.addInput("radiusValue", Integer.toString(this.sowRadius), 20);
-        bmlForm.addLabel(String.format("radiusValue of %1$s.            ", Integer.toString(this.sowRadius)));
-        bmlForm.addCheckBox("supplyBox", false);
-        bmlForm.addInput("supplyValue", Integer.toString(this.supplyQuantity), 20);
-        bmlForm.addLabel(String.format("supply value of %1$s. Max 2047.", Integer.toString(this.supplyQuantity)));
-        bmlForm.endTable();
-        bmlForm.addButton("Send", "submit");
-        String bml = bmlForm.toString();
-        //logger.log(Level.INFO, bml);
+        BmlBuilder bmlBuilder =
+            BmlBuilder.builder()
+            .withNode(table(2).withAttribute("rows", 4)
+                .withNode(label("Input", TextStyle.BOLD))
+                .withNode(label("Current setting", TextStyle.BOLD))
+                .withNode(checkbox("autoResow", "").withAttribute("selected",farmBarrel.isAutoResow()))
+                .withNode(label(String.format("Current auto-resow: %1$s", Boolean.toString(farmBarrel.isAutoResow()))))
+                .withNode(input("sowRadius").withAttribute("maxchars", 20))
+                .withNode(label(String.format("Current radius: %1$s", Integer.toString(farmBarrel.getSowRadius()))))
+                .withNode(input("supplyQuantity").withAttribute("maxchars", 20))
+                .withNode(label(String.format("Current supply amount: %1$s", Integer.toString(farmBarrel.getSupplyQuantity())))))
+            .withNode(button("submit", "Send"));
+        String bml = bmlBuilder.buildBml();
         question.getResponder().getCommunicator().sendBml(300, 150, true, true,
-                bml, 200, 200, 200, question.getTitle());
+                                                          bml, 200, 200, 200, question.getTitle());
     }
-
-
 }
