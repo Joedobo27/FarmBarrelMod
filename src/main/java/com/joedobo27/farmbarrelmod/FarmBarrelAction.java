@@ -30,7 +30,7 @@ abstract class FarmBarrelAction extends ActionMaster {
 
     abstract Item getTargetItem();
 
-    abstract Item getActiveTool();
+    public abstract Item getActiveTool();
 
     abstract FarmBarrel getFarmBarrel();
 
@@ -53,4 +53,6 @@ abstract class FarmBarrelAction extends ActionMaster {
         }
         return sowRadius.get(0);
     }
+
+
 }

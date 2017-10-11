@@ -171,4 +171,8 @@ class ConfigureOptions {
     public int getMaxSowingSlope() {
         return maxSowingSlope;
     }
+
+    public int getMinimumStamina() {
+        return this.getSowActionOptions().getMinimumStamina();
+    }
 }

@@ -1,6 +1,6 @@
 package com.joedobo27.farmbarrelmod;
 
-import com.joedobo27.libs.LinearScaldingFunction;
+import com.joedobo27.libs.LinearScalingFunction;
 import com.joedobo27.libs.TileUtilities;
 import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.Tiles;
@@ -164,13 +164,13 @@ class HarvestFarmer extends FarmBarrelAction {
     }
 
     int getYield() {
-        LinearScaldingFunction baseYieldFunction = LinearScaldingFunction.make(2.0d, 9.0d,
+        LinearScalingFunction baseYieldFunction = LinearScalingFunction.make(2.0d, 9.0d,
                 1.0d, 99.999999d);
         double modifiedSkill = this.performer.getSkills().getSkillOrLearn(SkillList.FARMING).
                 getKnowledge(this.activeTool, 0);
         double baseYield = baseYieldFunction.doFunctionOfX(modifiedSkill);
 
-        LinearScaldingFunction bonusYieldFunction = LinearScaldingFunction.make(0.0d, 11.0d,
+        LinearScalingFunction bonusYieldFunction = LinearScalingFunction.make(0.0d, 11.0d,
                 0.0d, 2047.0d);
         // In resourceMesh the farmChance value is cumulatively stored using mask 0B0000 0111 1111 1111 or
         //      0x7FF which is 2047.
@@ -211,7 +211,7 @@ class HarvestFarmer extends FarmBarrelAction {
     }
 
     @Override
-    Item getActiveTool() {
+    public Item getActiveTool() {
         return activeTool;
     }
 

@@ -72,7 +72,7 @@ public class FillBarrelFarmer extends FarmBarrelAction {
     }
 
     @Override
-    Item getActiveTool() {
+    public Item getActiveTool() {
         return activeTool;
     }
 

@@ -77,7 +77,7 @@ class EmptyBarrelFarmer extends FarmBarrelAction{
     }
 
     @Override
-    Item getActiveTool() {
+    public Item getActiveTool() {
         return activeTool;
     }
 

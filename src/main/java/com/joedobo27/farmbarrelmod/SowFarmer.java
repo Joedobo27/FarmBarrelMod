@@ -1,9 +1,11 @@
 package com.joedobo27.farmbarrelmod;
 
-import com.joedobo27.libs.LinearScaldingFunction;
+import com.joedobo27.libs.LinearScalingFunction;
 import com.joedobo27.libs.TileUtilities;
 import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.Players;
+import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.behaviours.Terraforming;
@@ -11,9 +13,18 @@ import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.NoSuchSkillException;
 import com.wurmonline.server.skills.Skill;
+import com.wurmonline.server.structures.BridgePart;
+import com.wurmonline.server.structures.Structure;
+import com.wurmonline.server.villages.Village;
+import com.wurmonline.server.zones.VolaTile;
+import com.wurmonline.server.zones.Zone;
+import com.wurmonline.server.zones.Zones;
+import com.wurmonline.shared.util.MaterialUtilities;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.WeakHashMap;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -26,28 +37,31 @@ class SowFarmer extends FarmBarrelAction {
     private final Item activeTool;
     private final FarmBarrel farmBarrel;
     private int totalTileCount;
+    private int lastWholeUnitTime;
 
-    protected SowFarmer(Action action, Creature performer, @Nullable Item activeTool, @Nullable Integer usedSkill, int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina, ArrayList<Function<FarmBarrelAction, Boolean>> failureTestFunctions, TilePos targetTile, FarmBarrel farmBarrel) {
+    SowFarmer(Action action, Creature performer, @Nullable Item activeTool, Integer usedSkill, int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina, ArrayList<Function<FarmBarrelAction, Boolean>> failureTestFunctions, TilePos targetTile, FarmBarrel farmBarrel) {
         super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina, failureTestFunctions);
         this.targetTile = targetTile;
         this.activeTool = activeTool;
         this.farmBarrel = farmBarrel;
+        this.totalTileCount = 0;
+        this.lastWholeUnitTime = 0;
         actionDataWeakHashMap.put(action, this);
     }
 
-    ArrayList<TilePos> selectSowTiles() {
+    LinkedList<TilePos> selectSowTiles() {
         int sowRadius = this.farmBarrel.getSowRadius();
         int westY = this.targetTile.y - sowRadius;
         int eastY = this.targetTile.y + sowRadius;
         int northX = this.targetTile.x - sowRadius;
         int southX = this.targetTile.x + sowRadius;
 
-        ArrayList<TilePos> sowTiles = new ArrayList<>();
+        LinkedList<TilePos> sowTiles = new LinkedList<>();
         IntStream.range(northX, southX + 1)
                 .forEach(X -> IntStream.range(westY, eastY + 1)
                         .forEach(Y -> {
                             TilePos tilePos = TilePos.fromXY(X, Y);
-                            if (isValidSowTile(TilePos.fromXY(X, Y)))
+                            if (isValidSowTile(tilePos))
                                  sowTiles.add(tilePos);
                         }));
         synchronized (this) {
@@ -57,19 +71,23 @@ class SowFarmer extends FarmBarrelAction {
     }
 
     private boolean isValidSowTile(TilePos tilePos) {
+        // can only sow on dirt tiles.
         if (TileUtilities.getSurfaceTypeId(tilePos) != Tiles.TILE_TYPE_DIRT)
             return false;
+
+        // is the tile flat enough?
         if (!Terraforming.isFlat(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface(),
                 ConfigureOptions.getInstance().getMaxSowingSlope())) {
             return false;
         }
+
+        // land or water plant mismatch.
         boolean isUnderWater = Terraforming.isCornerUnderWater(this.targetTile.x, this.targetTile.y,
                 this.performer.isOnSurface());
         ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(
                 this.farmBarrel.getContainedItemTemplateId());
         boolean isWaterPlant = itemTemplate.getTemplateId() == ItemList.rice ||
                 itemTemplate.getTemplateId() == ItemList.reedSeed;
-
         if (isUnderWater && !isWaterPlant) {
             return false;
         }
@@ -77,13 +95,45 @@ class SowFarmer extends FarmBarrelAction {
                 this.performer.isOnSurface(), (short)(-1), (short)(-4))) {
             return false;
         }
+
+        // can't so tiles inside houses.
+        VolaTile volaTile = Zones.getOrCreateTile(tilePos, this.performer.isOnSurface());
+        Structure structure = volaTile.getStructure();
+        if (structure != null)
+            return false;
+
+        // can't so tiles inside bridge supports.
+        BridgePart[] bridgeParts = volaTile.getBridgeParts();
+        if (bridgeParts != null && bridgeParts.length > 0 && Arrays.stream(bridgeParts)
+                    .anyMatch(bridgePart -> bridgePart.getType().isSupportType()))
+            return false;
+
+        // village permissions
+        Village village = Zones.getVillage(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface());
+        if (village != null &&
+                !village.isActionAllowed((short) this.getActionId(), this.performer,
+                        false, TileUtilities.getSurfaceEncodedValue(this.getTargetTile()),
+                        0) &&
+                !village.isEnemy(this.performer) && this.performer.isLegal())
+            return false;
+        if (village != null && !village.isActionAllowed((short) this.getActionId(), this.performer, false,
+                TileUtilities.getSurfaceEncodedValue(this.getTargetTile()), 0) &&
+                !Zones.isOnPvPServer(this.targetTile.x,this.targetTile.y))
+            return false;
+
+        // god protected
+        if (Zones.isTileProtected(this.targetTile.x, this.targetTile.y))
+            return false;
+
         return true;
     }
 
     boolean unitTimeJustTicked(float counter){
-        int unitTime = (int)(Math.floor((counter * 100) / (this.unitSowTimeInterval * 10)));
+        int unitTime = (int)(Math.floor((counter * 100) / (this.actionTimeTenthSecond * 10)));
         if (unitTime != this.lastWholeUnitTime){
-            this.lastWholeUnitTime = unitTime;
+            synchronized (this) {
+                this.lastWholeUnitTime = unitTime;
+            }
             return true;
         }
         return false;
@@ -93,6 +143,34 @@ class SowFarmer extends FarmBarrelAction {
     boolean hasAFailureCondition() {
         return this.getFailureTestFunctions().stream()
                 .anyMatch(function -> function.apply(this));
+    }
+
+    double doSkillCheckAndGetPower() {
+        if (this.usedSkill == null)
+            return 1.0d;
+        double difficulty = Crops.getDifficultyFromTemplateId(farmBarrel.getContainedItemTemplateId());
+        return Math.max(1.0d,
+                this.performer.getSkills().getSkillOrLearn(this.usedSkill).skillCheck(difficulty, this.activeTool,
+                        0, false, this.actionTimeTenthSecond/10));
+    }
+
+    void alterTileState() {
+        byte newFarmTile = Crops.getTileTypeFromTemplateId(this.farmBarrel.getContainedItemTemplateId());
+        TileUtilities.setSurfaceTypeId(this.targetTile, newFarmTile);
+        Server.modifyFlagsByTileType(this.targetTile.x, this.targetTile.y, newFarmTile);
+        Players.getInstance().sendChangedTile(this.targetTile.x, this.targetTile.y, performer.isOnSurface(), true);
+        Zone zone = TileUtilities.getZoneSafe(this.targetTile, this.performer.isOnSurface());
+        if (zone != null)
+            zone.changeTile(this.targetTile.x, this.targetTile.y);
+    }
+
+    void updateMeshResourceData() {
+        if (this.usedSkill == null)
+            return;
+        int resource = TileUtilities.encodeResourceFarmTileData(0, (int)Math.min(2047, 100.0 -
+                        this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge() +
+                this.activeTool.getQualityLevel() +(this.activeTool.getRarity() * 20) + (action.getRarity() * 50)));
+        Server.setWorldResource(this.targetTile.x, this.targetTile.y, resource);
     }
 
     static boolean hashMapContainsKey(Action action) {
@@ -110,7 +188,7 @@ class SowFarmer extends FarmBarrelAction {
     }
 
     @Override
-    Item getActiveTool() {
+    public Item getActiveTool() {
         return activeTool;
     }
 
@@ -121,9 +199,15 @@ class SowFarmer extends FarmBarrelAction {
 
     @Override
     public void setInitialTime(ActionEntry actionEntry) {
+        final double MAX_WOA_EFFECT = 0.20;
+        final double TOOL_RARITY_EFFECT = 0.10;
+        final double ACTION_RARITY_EFFECT = 0.33;
+
+        if (this.action == null || this.activeTool == null)
+            return;
         Skill toolSkill = null;
         double bonus = 0;
-        if (this.activeTool != null && this.activeTool.hasPrimarySkill()) {
+        if (this.activeTool.hasPrimarySkill()) {
             try {
                 toolSkill = this.performer.getSkills().getSkillOrLearn(this.activeTool.getPrimarySkill());
             } catch (NoSuchSkillException ignore) {}
@@ -138,44 +222,32 @@ class SowFarmer extends FarmBarrelAction {
         else
             modifiedKnowledge = this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge(this.activeTool,
                     bonus);
-        LinearScaldingFunction lsf = LinearScaldingFunction.make(this.minSkill, this.maxSkill, this.longestTime,
-                this.shortestTime);
-        int time = (int)lsf.doFunctionOfX(modifiedKnowledge);
+        LinearScalingFunction linearScalingFunction = LinearScalingFunction.make(this.minSkill, this.maxSkill,
+                this.longestTime, this.shortestTime);
+        double time = linearScalingFunction.doFunctionOfX(modifiedKnowledge);
 
-        time = woaReduce(time);
-        time = itemRarityReduce(time);
-        time = actionRarityReduce(time);
-        time = runeReduce(time);
-        time *= this.totalTileCount;
-        this.action.setTimeLeft(time);
-        this.performer.sendActionControl(actionEntry.getVerbString(), true, time);
-    }
+        if (this.activeTool.getSpellSpeedBonus() != 0.0f)
+            time = Math.max(this.shortestTime, time * (1 - (MAX_WOA_EFFECT *
+                    this.activeTool.getSpellSpeedBonus() / 100.0)));
 
-    private int woaReduce(int time) {
-        if (this.activeTool == null || this.activeTool.getSpellSpeedBonus() == 0.0f)
-            return time;
-        return (int)(Math.max(this.shortestTime, time * (1 -
-                (MAX_WOA_EFFECT.reductionMultiple * this.activeTool.getSpellSpeedBonus() / 100.0))));
-    }
+        if (this.activeTool.getRarity() != MaterialUtilities.COMMON)
+            time = Math.max(this.shortestTime, time * (1 - (this.activeTool.getRarity() *
+                    TOOL_RARITY_EFFECT)));
 
-    private int itemRarityReduce( int time) {
-        if (this.activeTool == null || this.activeTool.getRarity() == 0)
-            return time;
-        return (int)(Math.max(this.shortestTime, time * (1 - (this.activeTool.getRarity() * TOOL_RARITY_EFFECT.reductionMultiple))));
-    }
+        if (this.action.getRarity() != MaterialUtilities.COMMON)
+            time = Math.max(this.shortestTime, time * (1 - (this.action.getRarity() * ACTION_RARITY_EFFECT)));
 
-    private int actionRarityReduce(int time) {
-        if (this.action == null || this.action.getRarity() == 0)
-            return time;
-        return (int)(Math.max(this.shortestTime, time * (1 - (this.action.getRarity() * ACTION_RARITY_EFFECT.reductionMultiple))));
-    }
+        if (this.activeTool.getSpellEffects() != null && this.activeTool.getSpellEffects().getRuneEffect() != -10L)
+            time = Math.max(this.shortestTime, time * (1 -
+                    RuneUtilities.getModifier(this.activeTool.getSpellEffects().getRuneEffect(),
+                            RuneUtilities.ModifierEffect.ENCH_USESPEED)));
 
-    private int runeReduce(int time) {
-        if (this.activeTool == null || this.activeTool.getSpellEffects() == null ||
-                this.activeTool.getSpellEffects().getRuneEffect() == -10L)
-            return time;
-        return (int)(Math.max(this.shortestTime, time * (1 - RuneUtilities.getModifier(this.activeTool.getSpellEffects().getRuneEffect(),
-                RuneUtilities.ModifierEffect.ENCH_USESPEED))));
+        synchronized (this) {
+            this.actionTimeTenthSecond = (int) time;
+            this.action.setTimeLeft(this.actionTimeTenthSecond * this.totalTileCount);
+        }
+        this.performer.sendActionControl(actionEntry.getVerbString(), true,
+                this.actionTimeTenthSecond * this.totalTileCount);
     }
 
     int getTotalTileCount() {

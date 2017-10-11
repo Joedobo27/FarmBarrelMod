@@ -243,7 +243,6 @@ class ActionFailureFunction {
                 }));
     }
 
-
     static Function<FarmBarrelAction, Boolean> getFunction(int functionId) {
         if (failureFunctions.containsKey(functionId))
             return failureFunctions.get(functionId).function;
