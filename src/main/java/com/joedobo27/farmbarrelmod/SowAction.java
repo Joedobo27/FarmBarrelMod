@@ -1,197 +1,273 @@
 package com.joedobo27.farmbarrelmod;
 
+import com.joedobo27.libs.LinearScalingFunction;
+import com.joedobo27.libs.TileUtilities;
+import com.joedobo27.libs.action.ActionFailureFunction;
+import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
-import com.wurmonline.mesh.MeshIO;
 import com.wurmonline.mesh.Tiles;
-import com.wurmonline.server.Point;
+import com.wurmonline.server.Players;
 import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.Action;
+import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.behaviours.Terraforming;
 import com.wurmonline.server.creatures.Creature;
-import com.wurmonline.server.items.Item;
-import com.wurmonline.server.items.ItemList;
+import com.wurmonline.server.items.*;
+import com.wurmonline.server.skills.NoSuchSkillException;
+import com.wurmonline.server.skills.Skill;
+import com.wurmonline.server.structures.BridgePart;
+import com.wurmonline.server.structures.Structure;
+import com.wurmonline.server.villages.Village;
+import com.wurmonline.server.zones.VolaTile;
+import com.wurmonline.server.zones.Zone;
+import com.wurmonline.server.zones.Zones;
+import com.wurmonline.shared.util.MaterialUtilities;
+import org.jetbrains.annotations.Nullable;
 
-import static com.wurmonline.server.skills.SkillList.*;
-
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.stream.Collectors;
+import java.util.WeakHashMap;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 
-class SowAction {
-    private Creature performer;
-    private Item barrel;
-    private int seedTemplateId;
-    private int seedCount;
-    private LinkedList<Point> points;  // H is an encodedTile int.
-    private Action action;
-    private double unitSowTimeInterval;
-    private int totalTime;
+class SowAction extends ActionMaster {
+
+    private final TilePos targetTile;
+    private final FarmBarrel farmBarrel;
+    private int totalTileCount;
     private int lastWholeUnitTime;
+    private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
 
-    SowAction(Point centerTile, Action action, boolean surfaced, Creature performer, Item barrel, int encodedTile) {
-        this.action = action;
-        this.performer = performer;
-        this.barrel = barrel;
-        this.lastWholeUnitTime = 0;
+    private static WeakHashMap<Action, SowAction> performers = new WeakHashMap<>();
 
-        seedTemplateId = Crops.getSeedTemplateIdFromCropId(FarmBarrelMod.decodeContainedCropId(barrel));
-        points = new LinkedList<>();
-        IntStream.range(centerTile.getX() - getSowBarrelRadius(), centerTile.getX() + getSowBarrelRadius() + 1)
-                .forEach( posX ->
-                        IntStream.range(centerTile.getY() - getSowBarrelRadius(), centerTile.getY() + getSowBarrelRadius() + 1)
-                                .forEach(posY -> points.add(new Point(posX, posY, encodedTile)))
-                );
-        points = points.stream()
-                .filter(value -> isTileCompatibleWithSeed(value.getX(), value.getY(), surfaced))
-                .collect(Collectors.toCollection(LinkedList::new));
-        seedCount = getSeedCount();
-        unitSowTimeInterval = FarmBarrelMod.getBaseUnitActionTime(barrel, performer, action, FARMING, BODY_CONTROL);
-        totalTime = (int) Math.ceil(unitSowTimeInterval * points.size());
+    SowAction(Action action, Creature performer, @Nullable Item activeTool, @Nullable Integer usedSkill,
+                        int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina, TilePos targetTile,
+                        FarmBarrel farmBarrel, ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions) {
+        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
+        this.targetTile = targetTile;
+        this.farmBarrel = farmBarrel;
+        this.failureTestFunctions = failureTestFunctions;
+        performers.put(action, this);
+    }
+
+    @Nullable static SowAction getSowAction(Action action) {
+        if (!performers.containsKey(action))
+            return null;
+        return performers.get(action);
+    }
+
+    LinkedList<TilePos> selectSowTiles() {
+        int sowRadius = this.farmBarrel.getSowRadius();
+        int westY = this.targetTile.y - sowRadius;
+        int eastY = this.targetTile.y + sowRadius;
+        int northX = this.targetTile.x - sowRadius;
+        int southX = this.targetTile.x + sowRadius;
+
+        LinkedList<TilePos> sowTiles = new LinkedList<>();
+        IntStream.range(northX, southX + 1)
+                .forEach(X -> IntStream.range(westY, eastY + 1)
+                        .forEach(Y -> {
+                            TilePos tilePos = TilePos.fromXY(X, Y);
+                            if (isValidSowTile(tilePos))
+                                 sowTiles.add(tilePos);
+                        }));
+        synchronized (this) {
+            this.totalTileCount = sowTiles.size();
+        }
+        return sowTiles;
+    }
+
+    private boolean isValidSowTile(TilePos tilePos) {
+        // can only sow on dirt tiles.
+        if (TileUtilities.getSurfaceTypeId(tilePos) != Tiles.TILE_TYPE_DIRT)
+            return false;
+
+        // is the tile flat enough?
+        if (!Terraforming.isFlat(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface(),
+                ConfigureOptions.getInstance().getMaxSowingSlope())) {
+            return false;
+        }
+
+        // land or water plant mismatch.
+        boolean isUnderWater = Terraforming.isCornerUnderWater(this.targetTile.x, this.targetTile.y,
+                this.performer.isOnSurface());
+        ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(
+                this.farmBarrel.getContainedItemTemplateId());
+        boolean isWaterPlant = itemTemplate.getTemplateId() == ItemList.rice ||
+                itemTemplate.getTemplateId() == ItemList.reedSeed;
+        if (isUnderWater && !isWaterPlant) {
+            return false;
+        }
+        if (isWaterPlant && !Terraforming.isAllCornersInsideHeightRange(this.targetTile.x, this.targetTile.y,
+                this.performer.isOnSurface(), (short)(-1), (short)(-4))) {
+            return false;
+        }
+
+        // can't so tiles inside houses.
+        VolaTile volaTile = Zones.getOrCreateTile(tilePos, this.performer.isOnSurface());
+        Structure structure = volaTile.getStructure();
+        if (structure != null)
+            return false;
+
+        // can't so tiles inside bridge supports.
+        BridgePart[] bridgeParts = volaTile.getBridgeParts();
+        if (bridgeParts != null && bridgeParts.length > 0 && Arrays.stream(bridgeParts)
+                    .anyMatch(bridgePart -> bridgePart.getType().isSupportType()))
+            return false;
+
+        // village permissions
+        Village village = Zones.getVillage(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface());
+        if (village != null &&
+                !village.isActionAllowed((short) this.action.getNumber(), this.performer,
+                        false, TileUtilities.getSurfaceEncodedValue(this.getTargetTile()),
+                        0) &&
+                !village.isEnemy(this.performer) && this.performer.isLegal())
+            return false;
+        if (village != null && !village.isActionAllowed((short) this.action.getNumber(), this.performer, false,
+                TileUtilities.getSurfaceEncodedValue(this.getTargetTile()), 0) &&
+                !Zones.isOnPvPServer(this.targetTile.x,this.targetTile.y))
+            return false;
+
+        // god protected
+        if (Zones.isTileProtected(this.targetTile.x, this.targetTile.y))
+            return false;
+
+        return true;
     }
 
     boolean unitTimeJustTicked(float counter){
-        int unitTime = (int)(Math.floor((counter * 100) / (this.unitSowTimeInterval * 10)));
+        int unitTime = (int)(Math.floor((counter * 100) / (this.actionTimeTenthSecond * 10)));
         if (unitTime != this.lastWholeUnitTime){
-            this.lastWholeUnitTime = unitTime;
+            synchronized (this) {
+                this.lastWholeUnitTime = unitTime;
+            }
             return true;
         }
         return false;
     }
 
-    private int getSeedCount(){
-        if (seedTemplateId == -1)
-            return 0;
-        int seedGrams = Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedCropId(barrel));
-        if (seedGrams == 0)
-            return 0;
-        if (barrel.getWeightGrams() - 1000 == 0)
-            return 0;
-        return (barrel.getWeightGrams() - 1000) / seedGrams;
+    boolean hasAFailureCondition() {
+        boolean standardChecks =  failureTestFunctions.stream()
+                .anyMatch(function -> function.apply(this));
+        if (standardChecks)
+            return true;
+        boolean insufficientSkillSorSowArea = this.farmBarrel.getSowRadius();
+        failureFunctions.put(27, new ActionFailureFunction("FAILURE_FUNCTION_INSUFFICIENT_SKILL_FOR_SOW_AREA",
+                actionMaster -> {
+                    int sowBarrelRadius = actionMaster.getFarmBarrel().getSowRadius();
+                    int sowDimension = (sowBarrelRadius * 2) + 1;
+                    String sowArea = String.format("%d by %d area",sowDimension, sowDimension);
+                    if (actionMaster.getMaxRadiusFromFarmSkill(actionMaster.getPerformer()) < sowBarrelRadius) {
+                        actionMaster.getPerformer().getCommunicator().sendNormalServerMessage(
+                                "You don't have enough farming skill to sow a "+sowArea+".");
+                        return true;
+                    }
+                    return false;
+                }));
     }
 
-    int getSowDimension() {
-        return (getSowBarrelRadius() * 2) + 1;
+    double doSkillCheckAndGetPower() {
+        if (this.usedSkill == null)
+            return 1.0d;
+        double difficulty = Crops.getDifficultyFromTemplateId(farmBarrel.getContainedItemTemplateId());
+        return Math.max(1.0d,
+                this.performer.getSkills().getSkillOrLearn(this.usedSkill).skillCheck(difficulty, this.activeTool,
+                        0, false, this.actionTimeTenthSecond/10));
     }
 
-    int getSowBarrelRadius() {
-        return FarmBarrelMod.decodeSowRadius(barrel);
+    void alterTileState() {
+        byte newFarmTile = Crops.getTileTypeFromTemplateId(this.farmBarrel.getContainedItemTemplateId());
+        TileUtilities.setSurfaceTypeId(this.targetTile, newFarmTile);
+        Server.modifyFlagsByTileType(this.targetTile.x, this.targetTile.y, newFarmTile);
+        Players.getInstance().sendChangedTile(this.targetTile.x, this.targetTile.y, performer.isOnSurface(), true);
+        Zone zone = TileUtilities.getZoneSafe(this.targetTile, this.performer.isOnSurface());
+        if (zone != null)
+            zone.changeTile(this.targetTile.x, this.targetTile.y);
     }
 
-    boolean enoughSeedForSowing() {
-        return seedCount >= getSowTileCount();
+    void updateMeshResourceData() {
+        if (this.usedSkill == null)
+            return;
+        int resource = TileUtilities.encodeResourceFarmTileData(0, (int)Math.min(2047, 100.0 -
+                        this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge() +
+                this.activeTool.getQualityLevel() +(this.activeTool.getRarity() * 20) + (action.getRarity() * 50)));
+        Server.setWorldResource(this.targetTile.x, this.targetTile.y, resource);
     }
 
-    private boolean seedIsSeed() {
-        return seedTemplateId != -1;
+    @Override
+    public TilePos getTargetTile() {
+        return targetTile;
     }
 
-    int getSowTileCount() {
-        return points.size();
+    @Override
+    public Item getTargetItem() {
+        return null;
     }
 
-    /**
-     * LIFO pop.
-     *
-     * @return WU Point object.
-     */
-    Point popSowTile() {
-        return points.removeFirst();
+    @Override
+    public Item getActiveTool() {
+        return activeTool;
     }
 
-    private boolean isTileCompatibleWithSeed(int posX, int posY, boolean surfaced) {
-        if (!seedIsSeed())
-            return false;
-        MeshIO sowMesh;
-        if (surfaced) {
-            sowMesh = Server.surfaceMesh;
-        } else {
-            sowMesh = Server.caveMesh;
+    FarmBarrel getFarmBarrel() {
+        return farmBarrel;
+    }
+
+    @Override
+    public void setInitialTime(ActionEntry actionEntry) {
+        final double MAX_WOA_EFFECT = 0.20;
+        final double TOOL_RARITY_EFFECT = 0.10;
+        final double ACTION_RARITY_EFFECT = 0.33;
+
+        if (this.action == null || this.activeTool == null)
+            return;
+        Skill toolSkill = null;
+        double bonus = 0;
+        if (this.activeTool.hasPrimarySkill()) {
+            try {
+                toolSkill = this.performer.getSkills().getSkillOrLearn(this.activeTool.getPrimarySkill());
+            } catch (NoSuchSkillException ignore) {}
+        }
+        if (toolSkill != null) {
+            bonus = toolSkill.getKnowledge() / 10;
         }
 
-        int minimumHeight;
-        int maxHeight;
-        switch (seedTemplateId){
-            case ItemList.reedSeed:
-                minimumHeight = -4;
-                maxHeight = -1;
-                break;
-            case ItemList.rice:
-                minimumHeight = -4;
-                maxHeight = -1;
-                break;
-            default:
-                minimumHeight = 1;
-                maxHeight = Short.MAX_VALUE;
+        double modifiedKnowledge;
+        if (this.usedSkill == null)
+            modifiedKnowledge = 99;
+        else
+            modifiedKnowledge = this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge(this.activeTool,
+                    bonus);
+        LinearScalingFunction linearScalingFunction = LinearScalingFunction.make(this.minSkill, this.maxSkill,
+                this.longestTime, this.shortestTime);
+        double time = linearScalingFunction.doFunctionOfX(modifiedKnowledge);
+
+        if (this.activeTool.getSpellSpeedBonus() != 0.0f)
+            time = Math.max(this.shortestTime, time * (1 - (MAX_WOA_EFFECT *
+                    this.activeTool.getSpellSpeedBonus() / 100.0)));
+
+        if (this.activeTool.getRarity() != MaterialUtilities.COMMON)
+            time = Math.max(this.shortestTime, time * (1 - (this.activeTool.getRarity() *
+                    TOOL_RARITY_EFFECT)));
+
+        if (this.action.getRarity() != MaterialUtilities.COMMON)
+            time = Math.max(this.shortestTime, time * (1 - (this.action.getRarity() * ACTION_RARITY_EFFECT)));
+
+        if (this.activeTool.getSpellEffects() != null && this.activeTool.getSpellEffects().getRuneEffect() != -10L)
+            time = Math.max(this.shortestTime, time * (1 -
+                    RuneUtilities.getModifier(this.activeTool.getSpellEffects().getRuneEffect(),
+                            RuneUtilities.ModifierEffect.ENCH_USESPEED)));
+
+        synchronized (this) {
+            this.actionTimeTenthSecond = (int) time;
+            this.action.setTimeLeft(this.actionTimeTenthSecond * this.totalTileCount);
         }
-        TilePos targetTilePos = TilePos.fromXY(posX, posY);
-        boolean allCornersInHeightRange = Arrays.stream(new TilePos[]{targetTilePos, targetTilePos.East(), targetTilePos.SouthEast(), targetTilePos.South()})
-                .filter(tilePos -> TileUtilities.getSurfaceHeight(tilePos) >= minimumHeight)
-                .filter(tilePos -> TileUtilities.getSurfaceHeight(tilePos) <= maxHeight)
-                .count() == 4;
-
-        boolean isSlopeMinimal = Terraforming.isFlat(posX, posY, surfaced, 4);
-
-        byte seedNeededTile;
-        switch (seedTemplateId) {
-            case ItemList.mushroomBlack:
-                seedNeededTile = Tiles.Tile.TILE_CAVE.id;
-                break;
-            case ItemList.mushroomBlue:
-                seedNeededTile = Tiles.Tile.TILE_CAVE.id;
-                break;
-            case ItemList.mushroomBrown:
-                seedNeededTile = Tiles.Tile.TILE_CAVE.id;
-                break;
-            case ItemList.mushroomGreen:
-                seedNeededTile = Tiles.Tile.TILE_CAVE.id;
-                break;
-            case ItemList.mushroomRed:
-                seedNeededTile = Tiles.Tile.TILE_CAVE.id;
-                break;
-            case ItemList.mushroomYellow:
-                seedNeededTile = Tiles.Tile.TILE_CAVE.id;
-                break;
-            default:
-                seedNeededTile = Tiles.Tile.TILE_DIRT.id;
-        }
-        boolean seedsCompatibleWithTile = seedNeededTile == Tiles.decodeType(sowMesh.getTile(posX, posY));
-        return  allCornersInHeightRange && isSlopeMinimal && seedsCompatibleWithTile;
+        this.performer.sendActionControl(actionEntry.getVerbString(), true,
+                this.actionTimeTenthSecond * this.totalTileCount);
     }
 
-    @SuppressWarnings("ConstantConditions")
-    void consumeSeed() {
-        int weight = barrel.getWeightGrams() - Crops.getSeedGramsFromCropId(FarmBarrelMod.decodeContainedCropId(barrel));
-        if (weight == 1000) {
-            FarmBarrelMod.encodeIsSeed(barrel, false);
-            FarmBarrelMod.encodeContainedCropId(barrel, Crops.EMPTY.getId());
-            FarmBarrelMod.encodeContainedQuality(barrel, 0);
-            barrel.updateName();
-        }
-        barrel.setWeight(weight, false);
-    }
-
-    int getTotalTime() {
-        return totalTime;
-    }
-
-    double getUnitSowTimeInterval() {
-        return unitSowTimeInterval;
-    }
-
-    int getSeedTemplateId() {
-        return seedTemplateId;
-    }
-
-    Creature getPerformer() {
-        return performer;
-    }
-
-    Item getBarrel() {
-        return barrel;
-    }
-
-    LinkedList<Point> getPoints() {
-        return points;
+    int getTotalTileCount() {
+        return totalTileCount;
     }
 }

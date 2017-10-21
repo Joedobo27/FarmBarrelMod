@@ -1,15 +1,11 @@
 package com.joedobo27.farmbarrelmod;
 
 
-import com.wurmonline.server.behaviours.ActionEntry;
-import com.wurmonline.server.behaviours.Actions;
-import com.wurmonline.server.behaviours.Crops;
 import com.wurmonline.server.creatures.Communicator;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.SkillList;
 import javassist.*;
 import javassist.bytecode.Descriptor;
-import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.*;
 import org.gotti.wurmunlimited.modsupport.IdFactory;
@@ -23,7 +19,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.joedobo27.libs.action.ActionMaster.setActionEntryMaxRangeReflect;
-import static com.joedobo27.libs.action.ActionTypes.ACTION_NON_LIBILAPRIEST;
 
 
 public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, ItemTemplatesCreatedListener,
@@ -31,8 +26,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
 
     private static int sowBarrelTemplateId;
     static final Logger logger = Logger.getLogger(FarmBarrelMod.class.getName());
-    static Crops[] crops;
-
 
     @Override public boolean onPlayerMessage(Communicator communicator, String s) {
         return false;
@@ -103,33 +96,28 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
 
     @Override
     public void onServerStarted() {
-        getCropsReflection();
 
-        int configureSeedBarrelEntryId = ModActions.getNextActionId();
-        ActionEntry actionEntryConfigureBarrel = ActionEntry.createEntry((short) configureSeedBarrelEntryId,
-                "Configure", "Configuring", new int[] {ACTION_NON_LIBILAPRIEST.getId()});
-        ModActions.registerAction(actionEntryConfigureBarrel);
-        ConfigureSeedBarrelAction configureSeedBarrelAction = new ConfigureSeedBarrelAction(configureSeedBarrelEntryId,
-                actionEntryConfigureBarrel);
-        ModActions.registerAction(configureSeedBarrelAction);
+        ConfigureSeedBarrelActionPerformer configure = ConfigureSeedBarrelActionPerformer.getConfigureSeedBarrelActionPerformer();
+        ModActions.registerAction(configure.getActionEntry());
+        ModActions.registerAction(configure);
 
-        int emptyBarrelEntryId = ModActions.getNextActionId();
-        ActionEntry actionEntryEmptyBarrel = ActionEntry.createEntry((short) emptyBarrelEntryId, "Empty",
-                "emptying", new int[] {});
-        ModActions.registerAction(actionEntryEmptyBarrel);
-        EmptyBarrelAction emptyBarrelAction  = new EmptyBarrelAction(emptyBarrelEntryId, actionEntryEmptyBarrel);
-        ModActions.registerAction(emptyBarrelAction);
-        setActionEntryMaxRangeReflect(actionEntryEmptyBarrel, 8, logger);
+        EmptyBarrelActionPerformer empty = EmptyBarrelActionPerformer.getEmptyBarrelActionPerformer();
+        ModActions.registerAction(empty);
+        setActionEntryMaxRangeReflect(empty.getActionEntry(), 8, logger);
 
-        ModActions.registerAction(new ExamineBarrelAction());
+        ExamineBarrelActionPerformer examine = ExamineBarrelActionPerformer.getExamineBarrelActionPerformer();
+        ModActions.registerAction(examine);
 
-        ModActions.registerAction(new FillBarrelAction());
+        FillBarrelActionPerformer fill = FillBarrelActionPerformer.getFillBarrelActionPerformer();
+        ModActions.registerAction(fill);
 
-        ModActions.registerAction(new HarvestAction());
-        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.HARVEST], 8, logger);
+        HarvestActionPerformer harvest = HarvestActionPerformer.getHarvestActionPerformer();
+        ModActions.registerAction(harvest);
+        setActionEntryMaxRangeReflect(harvest.getActionEntry(), 8, logger);
 
-        ModActions.registerAction(new SowActionPerformer());
-        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.SOW], 8, logger);
+        SowActionPerformer sow = SowActionPerformer.getSowActionPerformer();
+        ModActions.registerAction(sow);
+        setActionEntryMaxRangeReflect(sow.getActionEntry(), 8, logger);
 
         AdvancedCreationEntry sowBarrel = CreationEntryCreator.createAdvancedEntry(SkillList.CARPENTRY,
                 ItemList.plank, ItemList.pegWood, sowBarrelTemplateId, false, false, 0.0f, true, false,
@@ -137,20 +125,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         sowBarrel.addRequirement(new CreationRequirement(1, ItemList.plank, 4, true));
         sowBarrel.addRequirement(new CreationRequirement(2, ItemList.pegWood, 4, true));
         sowBarrel.addRequirement(new CreationRequirement(3, ItemList.rope, 1, true));
-    }
-
-    private void getCropsReflection() {
-        try {
-            crops =
-            ReflectionUtil.getPrivateField(Class.forName("com.wurmonline.server.behaviours.Crops"),
-                    ReflectionUtil.getField(Class.forName("com.wurmonline.server.behaviours.Crops"), "crops"));
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        }
     }
 
     /**
@@ -182,12 +156,8 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         getNameCtMethod.insertAt(1232, source);
     }
 
-    @SuppressWarnings("WeakerAccess")
-    public static int getSowBarrelTemplateId() {
+    static int getSowBarrelTemplateId() {
         return sowBarrelTemplateId;
     }
 
-    public static Crops[] getCrops() {
-        return crops;
-    }
 }

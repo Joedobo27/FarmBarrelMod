@@ -3,6 +3,7 @@ package com.joedobo27.farmbarrelmod;
 
 import com.joedobo27.libs.ColorDefinitions;
 import com.wurmonline.server.behaviours.Action;
+import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.behaviours.Actions;
 import com.wurmonline.server.behaviours.MethodsItems;
 import com.wurmonline.server.creatures.Creature;
@@ -14,11 +15,31 @@ import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
 
-public class ExamineBarrelAction implements ModAction, ActionPerformer{
+public class ExamineBarrelActionPerformer implements ModAction, ActionPerformer{
+
+    private final short actionId;
+    private final ActionEntry actionEntry;
+
+    ExamineBarrelActionPerformer(short actionId, ActionEntry actionEntry) {
+        this.actionId = actionId;
+        this.actionEntry = actionEntry;
+    }
+
+
+    private static class SingletonHelper {
+        private static final ExamineBarrelActionPerformer _performer;
+        static {
+            _performer = new ExamineBarrelActionPerformer( Actions.EXAMINE, Actions.actionEntrys[Actions.EXAMINE]);
+        }
+    }
 
     @Override
     public short getActionId() {
-        return Actions.EXAMINE;
+        return actionId;
+    }
+
+    ActionEntry getActionEntry() {
+        return actionEntry;
     }
 
     @Override
@@ -67,5 +88,9 @@ public class ExamineBarrelAction implements ModAction, ActionPerformer{
             performer.getCommunicator().sendNormalServerMessage(improvedBy);
         }
         return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+    }
+
+    static ExamineBarrelActionPerformer getExamineBarrelActionPerformer() {
+        return SingletonHelper._performer;
     }
 }

@@ -1,127 +1,198 @@
 package com.joedobo27.farmbarrelmod;
 
-import org.jetbrains.annotations.Nullable;
 
+import javax.json.Json;
+import javax.json.JsonObject;
+import javax.json.JsonReader;
 import java.io.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Properties;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 class ConfigureOptions {
 
-    private final int configureBarrelQuestionId;
-    private final ConfigureActionOptions emptyBarrelActionOptions;
-    private final ConfigureActionOptions fillBarrelActionOptions;
-    private final ConfigureActionOptions harvestActionOptions;
-    private final ArrayList<Double> skillUnlockPoints;
-    private final ConfigureActionOptions sowActionOptions;
-    private final ArrayList<Integer> sowRadius;
-    private final ArrayList<Double>  sowYieldScaling;
-    private final int maxSowingSlope;
+    private ArrayList<Integer> sowRadius;
+    private ArrayList<Integer> skillUnlockPoints;
+    private ActionOptions emptyBarrelAction;
+    private ActionOptions fillBarrelAction;
+    private ActionOptions harvestAction;
+    private ActionOptions sowAction;
+    private int configureBarrelQuestionId;
+    private HarvestYieldOptions sowYieldScaling;
+    private int maxSowingSlope;
 
-    private static ConfigureOptions instance = null;
+    private static final ConfigureOptions instance;
     private static final String DEFAULT_ACTION_OPTION = "" +
             "{\"minSkill\":10 ,\"maxSkill\":95 , \"longestTime\":100 , \"shortestTime\":10 , \"minimumStamina\":6000}";
 
-    private ConfigureOptions(int configureBarrelQuestionId, ConfigureActionOptions emptyBarrelActionOptions,
-                             ConfigureActionOptions fillBarrelActionOptions, ConfigureActionOptions harvestActionOptions,
-                             ArrayList<Double> skillUnlockPoints, ConfigureActionOptions sowActionOptions,
-                             ArrayList<Integer> sowRadius, ArrayList<Double> sowYieldScaling, int maxSowingSlope) {
-        this.configureBarrelQuestionId = configureBarrelQuestionId;
-        this.emptyBarrelActionOptions = emptyBarrelActionOptions;
-        this.fillBarrelActionOptions = fillBarrelActionOptions;
-        this.harvestActionOptions = harvestActionOptions;
-        this.skillUnlockPoints = skillUnlockPoints;
-        this.sowActionOptions = sowActionOptions;
-        this.sowRadius = sowRadius;
-        this.sowYieldScaling = sowYieldScaling;
-        this.maxSowingSlope = maxSowingSlope;
-        instance = this;
+    static {
+        instance = new ConfigureOptions();
     }
 
-    synchronized static void setOptions(@Nullable Properties properties) {
-        if (instance == null) {
-            if (properties == null) {
-                properties = getProperties();
-            }
-            if (properties == null)
-                throw new RuntimeException("properties can't be null here.");
+    class ActionOptions {
+        private final int minSkill;
+        private final int maxSkill;
+        private final int longestTime;
+        private final int shortestTime;
+        private final int minimumStamina;
 
-            instance = new ConfigureOptions(
-                    Integer.valueOf(properties.getProperty("configureBarrelQuestionId")),
-                    doPropertiesToConfigureAction(properties.getProperty("emptyBarrelAction", DEFAULT_ACTION_OPTION)),
-                    doPropertiesToConfigureAction(properties.getProperty("fillBarrelAction", DEFAULT_ACTION_OPTION)),
-                    doPropertiesToConfigureAction(properties.getProperty("harvestAction", DEFAULT_ACTION_OPTION)),
-                    formatSkillUnlock(properties.getProperty("skillUnlockPoints")),
-                    doPropertiesToConfigureAction(properties.getProperty("sowAction", DEFAULT_ACTION_OPTION)),
-                    formatSowRadius(properties.getProperty("sowRadius")),
-                    formatSowYieldScaling(properties.getProperty("sowYieldScaling")),
-                    Integer.valueOf(properties.getProperty("maxSowingSlope")));
+        ActionOptions(int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina) {
+            this.minSkill = minSkill;
+            this.maxSkill = maxSkill;
+            this.longestTime = longestTime;
+            this.shortestTime = shortestTime;
+            this.minimumStamina = minimumStamina;
+        }
+
+        int getMinSkill() {
+            return minSkill;
+        }
+
+        int getMaxSkill() {
+            return maxSkill;
+        }
+
+        int getLongestTime() {
+            return longestTime;
+        }
+
+        int getShortestTime() {
+            return shortestTime;
+        }
+
+        int getMinimumStamina() {
+            return minimumStamina;
         }
     }
 
+    class HarvestYieldOptions {
+        private final double minimumBaseYield;
+        private final double maximumBaseYield;
+        private final double minimumSkill;
+        private final double maximumSkill;
+        private final double minimumBonusYield;
+        private final double maximumBonusYield;
+        private final double minimumFarmChance;
+        private final double maximumFarmChance;
+
+        HarvestYieldOptions(double minimumBaseYield, double maximumBaseYield, double minimumSkill, double maximumSkill,
+                            double minimumBonusYield, double maximumBonusYield, double minimumFarmChance,
+                            double maximumFarmChance) {
+            this.minimumBaseYield = minimumBaseYield;
+            this.maximumBaseYield = maximumBaseYield;
+            this.minimumSkill = minimumSkill;
+            this.maximumSkill = maximumSkill;
+            this.minimumBonusYield = minimumBonusYield;
+            this.maximumBonusYield = maximumBonusYield;
+            this.minimumFarmChance = minimumFarmChance;
+            this.maximumFarmChance = maximumFarmChance;
+        }
+
+        public double getMinimumBaseYield() {
+            return minimumBaseYield;
+        }
+
+        public double getMaximumBaseYield() {
+            return maximumBaseYield;
+        }
+
+        public double getMinimumSkill() {
+            return minimumSkill;
+        }
+
+        public double getMaximumSkill() {
+            return maximumSkill;
+        }
+
+        public double getMinimumBonusYield() {
+            return minimumBonusYield;
+        }
+
+        public double getMaximumBonusYield() {
+            return maximumBonusYield;
+        }
+
+        public double getMinimumFarmChance() {
+            return minimumFarmChance;
+        }
+
+        public double getMaximumFarmChance() {
+            return maximumFarmChance;
+        }
+    }
+
+    synchronized static void setOptions(Properties properties) {
+        instance.sowRadius = doPropertiesToArray(properties.getProperty("sowRadius"));
+        instance.skillUnlockPoints = doPropertiesToArray(properties.getProperty("skillUnlockPoints"));
+        instance.emptyBarrelAction = doPropertiesToActionOptions(properties.getProperty("emptyBarrelAction",
+                DEFAULT_ACTION_OPTION));
+        instance.fillBarrelAction = doPropertiesToActionOptions(properties.getProperty("fillBarrelAction",
+                DEFAULT_ACTION_OPTION));
+        instance.harvestAction = doPropertiesToActionOptions(properties.getProperty("harvestAction",
+                DEFAULT_ACTION_OPTION));
+        instance.sowAction = doPropertiesToActionOptions(properties.getProperty("sowAction",
+                DEFAULT_ACTION_OPTION));
+        instance.configureBarrelQuestionId = Integer.parseInt(properties.getProperty("configureBarrelQuestionId"));
+        instance.sowYieldScaling = doPropertiesToYieldOptions(properties.getProperty("sowYieldScaling"));
+        instance.maxSowingSlope = Integer.parseInt(properties.getProperty("maxSowingSlope"));
+    }
+
     synchronized static void resetOptions() {
-        instance = null;
         Properties properties = getProperties();
         if (properties == null)
             throw new RuntimeException("properties can't be null here.");
-        instance = new ConfigureOptions(
-                Integer.valueOf(properties.getProperty("configureBarrelQuestionId")),
-                doPropertiesToConfigureAction(properties.getProperty("emptyBarrelAction", DEFAULT_ACTION_OPTION)),
-                doPropertiesToConfigureAction(properties.getProperty("fillBarrelAction", DEFAULT_ACTION_OPTION)),
-                doPropertiesToConfigureAction(properties.getProperty("harvestAction", DEFAULT_ACTION_OPTION)),
-                formatSkillUnlock(properties.getProperty("skillUnlockPoints")),
-                doPropertiesToConfigureAction(properties.getProperty("sowAction", DEFAULT_ACTION_OPTION)),
-                formatSowRadius(properties.getProperty("sowRadius")),
-                formatSowYieldScaling(properties.getProperty("sowYieldScaling")),
-                Integer.valueOf(properties.getProperty("maxSowingSlope")));
+        instance.emptyBarrelAction = doPropertiesToActionOptions(properties.getProperty("emptyBarrelAction",
+                DEFAULT_ACTION_OPTION));
+        instance.fillBarrelAction = doPropertiesToActionOptions(properties.getProperty("fillBarrelAction",
+                DEFAULT_ACTION_OPTION));
+        instance.harvestAction = doPropertiesToActionOptions(properties.getProperty("harvestAction",
+                DEFAULT_ACTION_OPTION));
+        instance.sowAction = doPropertiesToActionOptions(properties.getProperty("sowAction",
+                DEFAULT_ACTION_OPTION));
+        instance.sowYieldScaling = doPropertiesToYieldOptions(properties.getProperty("sowYieldScaling"));
+        instance.configureBarrelQuestionId = Integer.parseInt(properties.getProperty("configureBarrelQuestionId"));
+        instance.maxSowingSlope = Integer.parseInt(properties.getProperty("maxSowingSlope"));
     }
 
-    private static ArrayList<Double> formatSowYieldScaling(String values) {
-        return Arrays.stream(values.replaceAll("\\s", "").split(","))
-                .mapToDouble(Double::parseDouble)
-                .boxed()
-                .collect(Collectors.toCollection(ArrayList::new));
+    private static ArrayList<Integer> doPropertiesToArray(String values) {
+        String[] strings = values.split(",");
+        ArrayList<Integer> integers = new ArrayList<>();
+        IntStream.range(0, strings.length)
+                .forEach(value -> integers.add(Integer.parseInt(strings[value])));
+        return integers;
     }
 
-    private static ArrayList<Integer> formatSowRadius(String values) {
-        FarmBarrelMod.logger.info("sowRadius: " + values);
-        return Arrays.stream(values.replaceAll("\\s", "").split(","))
-                .mapToInt(Integer::parseInt)
-                .boxed()
-                .collect(Collectors.toCollection(ArrayList::new));
+    private static ActionOptions doPropertiesToActionOptions(String values) {
+        Reader reader = new StringReader(values);
+        JsonReader jsonReader = Json.createReader(reader);
+        JsonObject jsonObject = jsonReader.readObject();
+        int minSkill = jsonObject.getInt("minSkill", 10);
+        int maxSkill = jsonObject.getInt("maxSkill", 95);
+        int longestTime = jsonObject.getInt("longestTime", 100);
+        int shortestTime = jsonObject.getInt("shortestTime", 10);
+        int minimumStamina = jsonObject.getInt("minimumStamina", 6000);
+        return instance.new ActionOptions(minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
     }
 
-    private static ArrayList<Double> formatSkillUnlock(String values) {
-        final double EQUIVALENT_100_SKILL = 99.99999615;
-        FarmBarrelMod.logger.info("sowRadius: " + values);
-
-        values = values.replaceAll("100", Double.toString(EQUIVALENT_100_SKILL));
-        return Arrays.stream(values.replaceAll("\\s", "").split(","))
-                .mapToDouble(Integer::parseInt)
-                .boxed()
-                .collect(Collectors.toCollection(ArrayList::new));
-    }
-
-    private static ConfigureActionOptions doPropertiesToConfigureAction(String values) {
-
-        ArrayList<Integer> integers = Arrays.stream(values.replaceAll("\\s", "").split(","))
-                .mapToInt(Integer::parseInt)
-                .boxed()
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        int minSkill = integers.get(0);
-        int maxSkill = integers.get(1);
-        int longestTime = integers.get(2);
-        int shortestTime = integers.get(3);
-        int minimumStamina = integers.get(4);
-        return new ConfigureActionOptions(minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
+    private static HarvestYieldOptions doPropertiesToYieldOptions(String values) {
+        Reader reader = new StringReader(values);
+        JsonReader jsonReader = Json.createReader(reader);
+        JsonObject jsonObject = jsonReader.readObject();
+        double minimumBaseYield = jsonObject.getJsonNumber("minimumBaseYield").doubleValue();
+        double maximumBaseYield = jsonObject.getJsonNumber("maximumBaseYield").doubleValue();
+        double minimumSkill = jsonObject.getJsonNumber("minimumSkill").doubleValue();
+        double maximumSkill = jsonObject.getJsonNumber("maximumSkill").doubleValue();
+        double minimumBonusYield = jsonObject.getJsonNumber("minimumBonusYield").doubleValue();
+        double maximumBonusYield = jsonObject.getJsonNumber("maximumBonusYield").doubleValue();
+        double minimumFarmChance = jsonObject.getJsonNumber("minimumFarmChance").doubleValue();
+        double maximumFarmChance = jsonObject.getJsonNumber("maximumFarmChance").doubleValue();
+        return instance.new HarvestYieldOptions(minimumBaseYield, maximumBaseYield, minimumSkill, maximumSkill, minimumBonusYield,
+                maximumBonusYield, minimumFarmChance, maximumFarmChance);
     }
 
     private static Properties getProperties() {
         try {
-            File configureFile = new File("mods/MightyMattockMod.properties");
+            File configureFile = new File("mods/FarmBarrelMod.properties");
             FileInputStream configureStream = new FileInputStream(configureFile);
             Properties configureProperties = new Properties();
             configureProperties.load(configureStream);
@@ -132,47 +203,43 @@ class ConfigureOptions {
         }
     }
 
-    public int getConfigureBarrelQuestionId() {
-        return configureBarrelQuestionId;
-    }
-
     static ConfigureOptions getInstance() {
         return instance;
     }
 
-    public ConfigureActionOptions getEmptyBarrelActionOptions() {
-        return emptyBarrelActionOptions;
-    }
-
-    public ConfigureActionOptions getFillBarrelActionOptions() {
-        return fillBarrelActionOptions;
-    }
-
-    public ConfigureActionOptions getHarvestActionOptions() {
-        return harvestActionOptions;
-    }
-
-    public ArrayList<Double> getSkillUnlockPoints() {
-        return skillUnlockPoints;
-    }
-
-    public ConfigureActionOptions getSowActionOptions() {
-        return sowActionOptions;
-    }
-
-    public ArrayList<Integer> getSowRadius() {
+    ArrayList<Integer> getSowRadius() {
         return sowRadius;
     }
 
-    public ArrayList<Double> getSowYieldScaling() {
+    ArrayList<Integer> getSkillUnlockPoints() {
+        return skillUnlockPoints;
+    }
+
+    ActionOptions getEmptyBarrelAction() {
+        return emptyBarrelAction;
+    }
+
+    ActionOptions getFillBarrelAction() {
+        return fillBarrelAction;
+    }
+
+    ActionOptions getHarvestAction() {
+        return harvestAction;
+    }
+
+    ActionOptions getSowAction() {
+        return sowAction;
+    }
+
+    int getConfigureBarrelQuestionId() {
+        return configureBarrelQuestionId;
+    }
+
+    HarvestYieldOptions getSowYieldScaling() {
         return sowYieldScaling;
     }
 
-    public int getMaxSowingSlope() {
+    int getMaxSowingSlope() {
         return maxSowingSlope;
-    }
-
-    public int getMinimumStamina() {
-        return this.getSowActionOptions().getMinimumStamina();
     }
 }

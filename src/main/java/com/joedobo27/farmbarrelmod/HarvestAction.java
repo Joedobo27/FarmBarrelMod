@@ -1,91 +1,128 @@
 package com.joedobo27.farmbarrelmod;
 
-
+import com.joedobo27.libs.LinearScalingFunction;
 import com.joedobo27.libs.TileUtilities;
+import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
-import com.wurmonline.server.behaviours.*;
+import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.Players;
+import com.wurmonline.server.Server;
+import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.creatures.Creature;
-import com.wurmonline.server.items.*;
+import com.wurmonline.server.items.Item;
 import com.wurmonline.server.skills.SkillList;
-import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
-import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
-import org.gotti.wurmunlimited.modsupport.actions.ModAction;
+import com.wurmonline.server.zones.Zone;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
-import static com.joedobo27.farmbarrelmod.ActionFailureFunction.*;
-import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
+class HarvestAction extends ActionMaster {
 
-class HarvestAction implements ModAction, BehaviourProvider, ActionPerformer {
+    private final TilePos targetTile;
+    private final FarmBarrel farmBarrel;
+    private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
 
-    @Override
-    public short getActionId(){
-        return Actions.HARVEST;
+    private static WeakHashMap<Action, HarvestAction> performers = new WeakHashMap<>();
+
+    HarvestAction(Action action, Creature performer, @Nullable Item activeTool, @Nullable Integer usedSkill,
+                            int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina,
+                            ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetTile,
+                            FarmBarrel farmBarrel) {
+        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
+        this.failureTestFunctions = failureTestFunctions;
+        this.targetTile = targetTile;
+        this.farmBarrel = farmBarrel;
+        performers.put(action, this);
     }
 
-    @Override
-    public List<ActionEntry> getBehavioursFor(Creature performer, Item active, int tileX, int tileY, boolean onSurface,
-                                              int encodedTile) {
-        if (active == null || active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
-                !TileUtilities.isFarmTile(encodedTile))
-            return BehaviourProvider.super.getBehavioursFor(performer, active, tileX, tileY, onSurface, encodedTile);
-        return Collections.singletonList(Actions.actionEntrys[Actions.HARVEST]);
+    @Nullable static HarvestAction getHarvestAction(Action action) {
+        if (!performers.containsKey(action))
+            return null;
+        return performers.get(action);
     }
 
-    @Override
-    public boolean action(Action action, Creature performer, Item active, int tileX, int tileY, boolean onSurface,
-                          int heightOffset, int encodedTile, short actionId, float counter) {
-        if (actionId != this.getActionId() || active == null ||
-                active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() || !TileUtilities.isFarmTile(encodedTile))
-            return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
-
-        HarvestFarmer harvestFarmer;
-        if (!HarvestFarmer.hashMapContainsKey(action)) {
-            ArrayList<Function<FarmBarrelAction, Boolean>> failureTestFunctions = new ArrayList<>();
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_BARREL_CONTENT_MISMATCH));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_CROPS_NOT_RIPE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_TOON_HOLDING_MAX_WEIGHT));
-
-            FarmBarrel farmBarrel = FarmBarrel.getOrMakeFarmBarrel(active);
-            ConfigureActionOptions options = ConfigureOptions.getInstance().getHarvestActionOptions();
-            harvestFarmer = new HarvestFarmer(action, performer, active, SkillList.FARMING, options.getMinSkill(),
-                    options.getMaxSkill(), options.getLongestTime(), options.getShortestTime(), options.getMinimumStamina(),
-                    failureTestFunctions, TilePos.fromXY(tileX, tileY), farmBarrel);
+    boolean hasAFailureCondition() {
+        boolean standardChecks =  failureTestFunctions.stream()
+                .anyMatch(function -> function.apply(this));
+        if (standardChecks)
+            return true;
+        boolean barrelContentMismatch = this.getTargetItem().getRealTemplateId() != this.farmBarrel.getContainedItemTemplateId();
+        if (barrelContentMismatch) {
+            getPerformer().getCommunicator().sendNormalServerMessage("" +
+                    "The seed barrel won't hold both "+farmBarrel.getCropName()+" and "+
+                    this.getTargetItem().getRealTemplate().getName()+".");
+            return true;
         }
+        return false;
+    }
+
+    double doSkillCheckAndGetPower(float counter) {
+        if (this.usedSkill == null)
+            return 1.0d;
+        int templateId = TileUtilities.getFarmTileCropId(this.targetTile);
+        double difficulty = Crops.getDifficultyFromTemplateId(templateId);
+        return Math.max(1.0d,
+                this.performer.getSkills().getSkillOrLearn(this.usedSkill).skillCheck(difficulty, this.activeTool,
+                        0, false, counter));
+    }
+
+    int getYield() {
+        ConfigureOptions.HarvestYieldOptions yieldOptions = ConfigureOptions.getInstance().getSowYieldScaling();
+        LinearScalingFunction baseYieldFunction = LinearScalingFunction.make(yieldOptions.getMinimumBaseYield(),
+                yieldOptions.getMaximumBaseYield(), yieldOptions.getMinimumSkill(), yieldOptions.getMaximumSkill());
+        double modifiedSkill = this.performer.getSkills().getSkillOrLearn(SkillList.FARMING).
+                getKnowledge(this.activeTool, 0);
+        double baseYield = baseYieldFunction.doFunctionOfX(modifiedSkill);
+
+
+        LinearScalingFunction bonusYieldFunction = LinearScalingFunction.make(yieldOptions.getMinimumBonusYield(),
+                yieldOptions.getMaximumBonusYield(), yieldOptions.getMinimumFarmChance(), yieldOptions.getMaximumFarmChance());
+        // In resourceMesh the farmChance value is cumulatively stored using mask 0B0000 0111 1111 1111 or
+        //      0x7FF which is 2047.
+        double farmedChance = TileUtilities.getFarmTileCumulativeChance(this.targetTile);
+        int farmedCount = TileUtilities.getFarmTileTendCount(this.targetTile);
+        int toolRarity;
+        if (this.activeTool == null)
+            toolRarity = 0;
         else
-            harvestFarmer = HarvestFarmer.getActionDataWeakHashMap().get(action);
+            toolRarity = this.activeTool.getRarity();
+        double harvestChance= (this.action.getRarity() * 110) + (toolRarity * 50) +
+                (Math.min(5, farmedCount) * 50);
+        farmedChance += harvestChance;
+        double bonusYield = bonusYieldFunction.doFunctionOfX(farmedChance);
 
-        if (harvestFarmer.isActionStartTime(counter) && harvestFarmer.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+        return (int)Math.round(baseYield + bonusYield);
+    }
 
-        if (harvestFarmer.isActionStartTime(counter)) {
-            harvestFarmer.doActionStartMessages();
-            harvestFarmer.setInitialTime(Actions.actionEntrys[Actions.HARVEST]);
-            active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
-            performer.getStatus().modifyStamina(-1000.0f);
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        }
+    void alterTileState() {
+        TileUtilities.setSurfaceTypeId(this.targetTile, Tiles.TILE_TYPE_DIRT);
+        Server.modifyFlagsByTileType(this.targetTile.x, this.targetTile.y, Tiles.Tile.TILE_DIRT.id);
+        this.performer.getMovementScheme().touchFreeMoveCounter();
+        Players.getInstance().sendChangedTile(this.targetTile.x, this.targetTile.y, performer.isOnSurface(), true);
+        Zone zone = TileUtilities.getZoneSafe(this.targetTile, this.performer.isOnSurface());
+        if (zone != null)
+            zone.changeTile(this.targetTile.x, this.targetTile.y);
+    }
 
-        if (!harvestFarmer.isActionTimedOut(action, counter)) {
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        }
-        if (harvestFarmer.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
-        double power = harvestFarmer.doSkillCheckAndGetPower(counter);
-        int harvestYield = harvestFarmer.getYield();
-        harvestFarmer.alterTileState();
-        harvestFarmer.getFarmBarrel().increaseContainedCount(harvestYield, power,
-                TileUtilities.getItemTemplateFromHarvestTile(harvestFarmer.getTargetTile()).getTemplateId());
-        active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
-        performer.getStatus().modifyStamina(-10000.0f);
-        harvestFarmer.doActionEndMessages();
-        return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+    @Override
+    public TilePos getTargetTile() {
+        return targetTile;
+    }
+
+    @Override
+    public Item getTargetItem() {
+        return null;
+    }
+
+    @Override
+    public Item getActiveTool() {
+        return activeTool;
+    }
+
+    FarmBarrel getFarmBarrel() {
+        return farmBarrel;
     }
 }
