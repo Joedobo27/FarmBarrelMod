@@ -1,4 +1,4 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.behaviours.ActionEntry;

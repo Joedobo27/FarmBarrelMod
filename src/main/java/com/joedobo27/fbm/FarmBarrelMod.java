@@ -1,12 +1,9 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 
 import com.wurmonline.server.creatures.Communicator;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.SkillList;
-import javassist.*;
-import javassist.bytecode.Descriptor;
-import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.*;
 import org.gotti.wurmunlimited.modsupport.IdFactory;
 import org.gotti.wurmunlimited.modsupport.IdType;
@@ -38,6 +35,11 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
                     "Reloading properties for FarmBarrelMod."
             );
             ConfigureOptions.resetOptions();
+            if (ConfigureOptions.getInstance().getSkillUnlockPoints().size() !=
+                    ConfigureOptions.getInstance().getSowRadius().size())
+                communicator.getPlayer().getCommunicator().sendNormalServerMessage(
+                        "sowRadius and skillUnlockPoints are not the same length. This will cause errors."
+                );
             return MessagePolicy.DISCARD;
         }
         return MessagePolicy.PASS;
@@ -46,6 +48,12 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
     @Override
     public void configure(Properties properties) {
         ConfigureOptions.setOptions(properties);
+        if (ConfigureOptions.getInstance().getSkillUnlockPoints().size() !=
+                ConfigureOptions.getInstance().getSowRadius().size()) {
+            logger.warning("sowRadius and skillUnlockPoints are not the same length. Setting with defaults instead.");
+            ConfigureOptions.getInstance().setSowRadiusWithDefaults();
+            ConfigureOptions.getInstance().setSkillUnlockPointsWithDefauts();
+        }
     }
 
     @Override
@@ -56,9 +64,9 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         //TODO add a way to harvest bushes/Trees.
         //TODO switch the barrel data state mechanics from using data1&2 fields to using a serialized
         //TODO   object > base64 string > inscription DB entry.
+
         try {
             ModActions.init();
-            insertIntoGetName();
         } catch (Exception e) {
             logger.log(Level.WARNING, e.getMessage(), e);
         }
@@ -125,35 +133,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         sowBarrel.addRequirement(new CreationRequirement(1, ItemList.plank, 4, true));
         sowBarrel.addRequirement(new CreationRequirement(2, ItemList.pegWood, 4, true));
         sowBarrel.addRequirement(new CreationRequirement(3, ItemList.rope, 1, true));
-    }
-
-    /**
-     * Insert a code block into Item.getName(Z) to handle custom naming when the seed barrel contains seeds. For example
-     * name a barrel: Seed barrel [corn].
-     * insert towards its end and just before this:
-     *      builder.app end(this.name);
-     *      line 1232: 2123
-     *
-     * @throws NotFoundException JA related, forwarded
-     * @throws CannotCompileException JA related, forwarded
-     */
-    private void insertIntoGetName() throws NotFoundException, CannotCompileException {
-        CtClass itemCtClass = HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.Item");
-
-        CtClass returnType = HookManager.getInstance().getClassPool().get("java.lang.String");
-        CtClass[] paramTypes = {CtPrimitiveType.booleanType};
-        CtMethod getNameCtMethod = itemCtClass.getMethod("getName", Descriptor.ofMethod(returnType, paramTypes));
-
-        String source = "" +
-                "if (this.getTemplateId() == com.joedobo27.farmbarrelmod.FarmBarrelMod.getSowBarrelTemplateId() " +
-                "&& com.joedobo27.farmbarrelmod.FarmBarrelMod.decodeContainedCropId(this) != " +
-                "com.joedobo27.farmbarrelmod.Crops.EMPTY.getId()){ " +
-                "stoSend = \" [\" + com.joedobo27.farmbarrelmod.Crops.getCropNameFromCropId(" +
-                "com.joedobo27.farmbarrelmod.FarmBarrelMod.decodeContainedCropId(this), " +
-                "com.joedobo27.farmbarrelmod.FarmBarrelMod.decodeIsSeed(this)) + \"]\";}" +
-                "";
-
-        getNameCtMethod.insertAt(1232, source);
     }
 
     static int getSowBarrelTemplateId() {

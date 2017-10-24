@@ -1,4 +1,4 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 import com.joedobo27.libs.TileUtilities;
 import com.joedobo27.libs.action.ActionMaster;
@@ -65,12 +65,6 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
         if (sowAction == null) {
             ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_TILE_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_TILE_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_TILE_GOD_PROTECTED));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_TILE_OCCUPIED_BY_HOUSE));
-            failureTestFunctions.add((getFunction(FAILURE_FUNCTION_TILE_OCCUPIED_BY_BRIDGE_SUPPORT)));
-
 
             ConfigureOptions.ActionOptions options = ConfigureOptions.getInstance().getSowAction();
             sowAction = new SowAction(action, performer, active, SkillList.FARMING, options.getMinSkill(), options.getMaxSkill(),
@@ -80,8 +74,9 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
 
         if (sowAction.isActionStartTime(counter) && sowAction.hasAFailureCondition())
             return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        LinkedList<TilePos> sowTiles = sowAction.selectSowTiles();
+
         if (sowAction.isActionStartTime(counter)) {
+            sowAction.selectSowingTiles();
             sowAction.doActionStartMessages();
             sowAction.setInitialTime(Actions.actionEntrys[Actions.SOW]);
             active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
@@ -96,12 +91,14 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
         }
 
         if (sowAction.unitTimeJustTicked(counter)) {
+            TilePos sowTile = sowAction.getNextSowTile();
+            if (sowTile == null)
+                return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
             sowAction.doSkillCheckAndGetPower();
             sowAction.getFarmBarrel().reduceContainedCount(1);
-            //TODO This needs to reflection poping tilePos off the sowTiles linkedList and using them.
-            sowAction.alterTileState();
-            sowAction.updateMeshResourceData();
-            CropTilePoller.addCropTile(TileUtilities.getSurfaceData(sowAction.getTargetTile()), tileX, tileY,
+            sowAction.alterTileState(sowTile);
+            sowAction.updateMeshResourceData(sowTile);
+            CropTilePoller.addCropTile(TileUtilities.getSurfaceData(sowTile), sowTile.x, sowTile.y,
                     Crops.getCropIdFromTemplateId(sowAction.getFarmBarrel().getContainedItemTemplateId()), onSurface);
             active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
             performer.getStatus().modifyStamina(-2000.0f);
@@ -112,5 +109,4 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
     static SowActionPerformer getSowActionPerformer() {
         return SingletonHelper._performer;
     }
-
 }

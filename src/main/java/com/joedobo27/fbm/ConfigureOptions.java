@@ -1,4 +1,4 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 
 import javax.json.Json;
@@ -6,6 +6,7 @@ import javax.json.JsonObject;
 import javax.json.JsonReader;
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.stream.IntStream;
 
@@ -201,6 +202,14 @@ class ConfigureOptions {
             FarmBarrelMod.logger.warning(e.getMessage());
             return null;
         }
+    }
+
+    synchronized void setSowRadiusWithDefaults() {
+        sowRadius = new ArrayList<>(Arrays.asList(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15));
+    }
+
+    synchronized void setSkillUnlockPointsWithDefauts() {
+        skillUnlockPoints = new ArrayList<>(Arrays.asList(0,10,20,30,40,50,60,70,80,90,92,94,96,98,100));
     }
 
     static ConfigureOptions getInstance() {

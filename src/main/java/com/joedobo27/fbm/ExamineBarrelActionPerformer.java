@@ -1,4 +1,4 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 
 import com.joedobo27.libs.ColorDefinitions;

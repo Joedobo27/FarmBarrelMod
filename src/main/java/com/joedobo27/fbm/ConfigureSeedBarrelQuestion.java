@@ -1,4 +1,4 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 import com.wurmonline.server.questions.Question;
 import org.gotti.wurmunlimited.modsupport.bml.BmlBuilder;

@@ -1,8 +1,7 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 import com.joedobo27.libs.LinearScalingFunction;
 import com.joedobo27.libs.TileUtilities;
-import com.joedobo27.libs.action.ActionFailureFunction;
 import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.Tiles;
@@ -24,10 +23,7 @@ import com.wurmonline.server.zones.Zones;
 import com.wurmonline.shared.util.MaterialUtilities;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.WeakHashMap;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
@@ -35,8 +31,8 @@ class SowAction extends ActionMaster {
 
     private final TilePos targetTile;
     private final FarmBarrel farmBarrel;
-    private int totalTileCount;
     private int lastWholeUnitTime;
+    private LinkedList<TilePos> sowTiles;
     private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
 
     private static WeakHashMap<Action, SowAction> performers = new WeakHashMap<>();
@@ -57,7 +53,7 @@ class SowAction extends ActionMaster {
         return performers.get(action);
     }
 
-    LinkedList<TilePos> selectSowTiles() {
+    void selectSowingTiles() {
         int sowRadius = this.farmBarrel.getSowRadius();
         int westY = this.targetTile.y - sowRadius;
         int eastY = this.targetTile.y + sowRadius;
@@ -73,9 +69,12 @@ class SowAction extends ActionMaster {
                                  sowTiles.add(tilePos);
                         }));
         synchronized (this) {
-            this.totalTileCount = sowTiles.size();
+            this.sowTiles = sowTiles;
         }
-        return sowTiles;
+    }
+
+    TilePos getNextSowTile() {
+        return sowTiles.remove();
     }
 
     private boolean isValidSowTile(TilePos tilePos) {
@@ -89,11 +88,17 @@ class SowAction extends ActionMaster {
             return false;
         }
 
+        // successful fetch of contained seed item template;
+        ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(
+                this.farmBarrel.getContainedItemTemplateId());
+        if (itemTemplate == null) {
+            return false;
+        }
+
         // land or water plant mismatch.
         boolean isUnderWater = Terraforming.isCornerUnderWater(this.targetTile.x, this.targetTile.y,
                 this.performer.isOnSurface());
-        ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(
-                this.farmBarrel.getContainedItemTemplateId());
+
         boolean isWaterPlant = itemTemplate.getTemplateId() == ItemList.rice ||
                 itemTemplate.getTemplateId() == ItemList.reedSeed;
         if (isUnderWater && !isWaterPlant) {
@@ -119,12 +124,12 @@ class SowAction extends ActionMaster {
         // village permissions
         Village village = Zones.getVillage(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface());
         if (village != null &&
-                !village.isActionAllowed((short) this.action.getNumber(), this.performer,
+                !village.isActionAllowed(this.action.getNumber(), this.performer,
                         false, TileUtilities.getSurfaceEncodedValue(this.getTargetTile()),
                         0) &&
                 !village.isEnemy(this.performer) && this.performer.isLegal())
             return false;
-        if (village != null && !village.isActionAllowed((short) this.action.getNumber(), this.performer, false,
+        if (village != null && !village.isActionAllowed(this.action.getNumber(), this.performer, false,
                 TileUtilities.getSurfaceEncodedValue(this.getTargetTile()), 0) &&
                 !Zones.isOnPvPServer(this.targetTile.x,this.targetTile.y))
             return false;
@@ -152,19 +157,37 @@ class SowAction extends ActionMaster {
                 .anyMatch(function -> function.apply(this));
         if (standardChecks)
             return true;
-        boolean insufficientSkillSorSowArea = this.farmBarrel.getSowRadius();
-        failureFunctions.put(27, new ActionFailureFunction("FAILURE_FUNCTION_INSUFFICIENT_SKILL_FOR_SOW_AREA",
-                actionMaster -> {
-                    int sowBarrelRadius = actionMaster.getFarmBarrel().getSowRadius();
-                    int sowDimension = (sowBarrelRadius * 2) + 1;
-                    String sowArea = String.format("%d by %d area",sowDimension, sowDimension);
-                    if (actionMaster.getMaxRadiusFromFarmSkill(actionMaster.getPerformer()) < sowBarrelRadius) {
-                        actionMaster.getPerformer().getCommunicator().sendNormalServerMessage(
-                                "You don't have enough farming skill to sow a "+sowArea+".");
-                        return true;
-                    }
-                    return false;
-                }));
+
+        // Check player's farm skill against against reqired for barrel's radius setting.
+        ArrayList<Integer> skillBrackets = ConfigureOptions.getInstance().getSkillUnlockPoints();
+        ArrayList<Integer> radii = ConfigureOptions.getInstance().getSowRadius();
+        if (skillBrackets.size() != radii.size()){
+            this.performer.getCommunicator().sendNormalServerMessage(
+                    "Something went wrong, sorry.");
+            return true;
+        }
+        int ordinal = IntStream.range(0, radii.size())
+                .filter(value -> this.farmBarrel.getSowRadius() == radii.get(value))
+                .findAny()
+                .orElse(-1);
+        if (ordinal == -1){
+            this.performer.getCommunicator().sendNormalServerMessage(
+                    String.format("%d is not a valid sow radius setting.", this.farmBarrel.getSowRadius()));
+            return true;
+        }
+        int minimumSkill = skillBrackets.get(ordinal);
+        if (this.usedSkill == null){
+            this.performer.getCommunicator().sendNormalServerMessage(
+                    "Something went wrong, sorry.");
+            return true;
+        }
+        if (this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge() < minimumSkill) {
+            this.performer.getCommunicator().sendNormalServerMessage(
+                    String.format("You need at least %d farming skill to sow a %d x %d area.", minimumSkill,
+                            (this.farmBarrel.getSowRadius() * 2) + 1, (this.farmBarrel.getSowRadius() * 2) + 1));
+            return true;
+        }
+        return false;
     }
 
     double doSkillCheckAndGetPower() {
@@ -176,23 +199,29 @@ class SowAction extends ActionMaster {
                         0, false, this.actionTimeTenthSecond/10));
     }
 
-    void alterTileState() {
+    void alterTileState(TilePos sowTile) {
         byte newFarmTile = Crops.getTileTypeFromTemplateId(this.farmBarrel.getContainedItemTemplateId());
-        TileUtilities.setSurfaceTypeId(this.targetTile, newFarmTile);
-        Server.modifyFlagsByTileType(this.targetTile.x, this.targetTile.y, newFarmTile);
-        Players.getInstance().sendChangedTile(this.targetTile.x, this.targetTile.y, performer.isOnSurface(), true);
-        Zone zone = TileUtilities.getZoneSafe(this.targetTile, this.performer.isOnSurface());
+        TileUtilities.setSurfaceTypeId(sowTile, newFarmTile);
+        Server.modifyFlagsByTileType(sowTile.x, sowTile.y, newFarmTile);
+        Players.getInstance().sendChangedTile(sowTile.x, sowTile.y, performer.isOnSurface(), true);
+        Zone zone = TileUtilities.getZoneSafe(sowTile, this.performer.isOnSurface());
         if (zone != null)
-            zone.changeTile(this.targetTile.x, this.targetTile.y);
+            zone.changeTile(sowTile.x, sowTile.y);
     }
 
-    void updateMeshResourceData() {
-        if (this.usedSkill == null)
+    void updateMeshResourceData(TilePos sowTile) {
+        if (this.usedSkill == null || this.activeTool == null)
             return;
-        int resource = TileUtilities.encodeResourceFarmTileData(0, (int)Math.min(2047, 100.0 -
-                        this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge() +
-                this.activeTool.getQualityLevel() +(this.activeTool.getRarity() * 20) + (action.getRarity() * 50)));
-        Server.setWorldResource(this.targetTile.x, this.targetTile.y, resource);
+        int sowResult = (int)Math.min(2047,
+                100.0 - this.performer.getSkills().getSkillOrLearn(this.usedSkill).getKnowledge() +
+                this.activeTool.getQualityLevel() + (this.activeTool.getRarity() * 20) +
+                (action.getRarity() * 50));
+        int resource = TileUtilities.encodeResourceFarmTileData(0, sowResult);
+        Server.setWorldResource(sowTile.x, sowTile.y, resource);
+    }
+
+    public LinkedList<TilePos> getSowTiles() {
+        return sowTiles;
     }
 
     @Override
@@ -261,13 +290,9 @@ class SowAction extends ActionMaster {
 
         synchronized (this) {
             this.actionTimeTenthSecond = (int) time;
-            this.action.setTimeLeft(this.actionTimeTenthSecond * this.totalTileCount);
+            this.action.setTimeLeft(this.actionTimeTenthSecond * this.sowTiles.size());
         }
         this.performer.sendActionControl(actionEntry.getVerbString(), true,
-                this.actionTimeTenthSecond * this.totalTileCount);
-    }
-
-    int getTotalTileCount() {
-        return totalTileCount;
+                this.actionTimeTenthSecond * this.sowTiles.size());
     }
 }

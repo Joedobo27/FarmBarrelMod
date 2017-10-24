@@ -1,7 +1,8 @@
-package com.joedobo27.farmbarrelmod;
+package com.joedobo27.fbm;
 
 
 import com.wurmonline.server.items.*;
+import com.wurmonline.shared.util.MaterialUtilities;
 import org.jetbrains.annotations.NotNull;
 
 import javax.json.*;
@@ -18,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 class FarmBarrel {
 
     private boolean autoResow;
-    private Item farmBarrel;
+    private Item wuItem;
     private ScheduledExecutorService jsonWritingExecutor;
     private int containedCount;
     private int containedItemTemplateId;
@@ -32,10 +33,10 @@ class FarmBarrel {
     private static final String DEFAULT_BARREL_SETTING =
     "{\"autoResow\":false, \"containedCount\":0, \"containedItemTemplateId\":-1, \"containedQuality\":0, \"sowRadius\":0, \"supplyQuantity\":0}";
 
-    private FarmBarrel(boolean autoResow, Item farmBarrel, int containedCount, int containedItemTemplateId, double containedQuality, int sowRadius,
+    private FarmBarrel(boolean autoResow, Item wuItem, int containedCount, int containedItemTemplateId, double containedQuality, int sowRadius,
                        int supplyQuantity) {
         this.autoResow = autoResow;
-        this.farmBarrel = farmBarrel;
+        this.wuItem = wuItem;
         this.containedCount = containedCount;
         this.containedItemTemplateId = containedItemTemplateId;
         this.containedQuality = containedQuality;
@@ -44,7 +45,6 @@ class FarmBarrel {
     }
 
     class RunnableJsonUpdater implements Runnable {
-
         private final Item farmBarrel;
         private final ScheduledExecutorService jsonWritingExecutor;
 
@@ -75,7 +75,7 @@ class FarmBarrel {
     synchronized private void checkOrQueueScheduledJsonBackup() {
         if (jsonWritingExecutor.isShutdown()) {
             jsonWritingExecutor = Executors.newSingleThreadScheduledExecutor();
-            RunnableJsonUpdater runnableJsonUpdater = new RunnableJsonUpdater(this.farmBarrel, this.jsonWritingExecutor);
+            RunnableJsonUpdater runnableJsonUpdater = new RunnableJsonUpdater(this.wuItem, this.jsonWritingExecutor);
             jsonWritingExecutor.schedule(runnableJsonUpdater, 10, TimeUnit.MINUTES);
         }
     }
@@ -89,11 +89,11 @@ class FarmBarrel {
         }
 
         ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(this.containedItemTemplateId);
-        int barrelGrams = this.farmBarrel.getTemplate().getWeightGrams();
+        int barrelGrams = this.wuItem.getTemplate().getWeightGrams();
         if (this.containedItemTemplateId != NONE_CROP_ID && itemTemplate != null) {
             barrelGrams += (itemTemplate.getWeightGrams() * this.containedCount);
         }
-        this.farmBarrel.setWeight(barrelGrams, false);
+        this.wuItem.setWeight(barrelGrams, false);
         if (this.containedItemTemplateId != originalId)
             updateBarrelName();
     }
@@ -105,19 +105,21 @@ class FarmBarrel {
         this.containedItemTemplateId = itemTemplateId;
 
         ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(this.containedItemTemplateId);
-        int barrelGramms = this.farmBarrel.getTemplate().getWeightGrams();
+        int barrelGramms = this.wuItem.getTemplate().getWeightGrams();
         if (this.containedItemTemplateId != NONE_CROP_ID && itemTemplate != null) {
             barrelGramms += (itemTemplate.getWeightGrams() * this.getContainedCount());
             this.containedQuality = qlWeightedAverage;
         }
-        this.farmBarrel.setWeight(barrelGramms, false);
+        this.wuItem.setWeight(barrelGramms, false);
         if (this.containedItemTemplateId != originalId)
             updateBarrelName();
     }
 
 
     private void updateBarrelName() {
-
+        String s = MaterialUtilities.getRarityString(this.wuItem.getRarity()) + this.wuItem.getTemplate().getName() +
+                "[" + getCropName() + "]";
+        this.wuItem.setName(s);
     }
 
     String getCropName() {
@@ -151,9 +153,7 @@ class FarmBarrel {
                     supplyQuantity);
             farmBarrels.put(item.getWurmId(), farmBarrel);
         }
-        if (jsonReader != null) {
-            jsonReader.close();
-        }
+        jsonReader.close();
     }
 
     private static void doFarmBarrelToInscriptionJson(Item item) {
@@ -187,18 +187,6 @@ class FarmBarrel {
         }
     }
 
-    static boolean containsFoodItem(@NotNull Item item) {
-        FarmBarrel farmBarrel = getOrMakeFarmBarrel(item);
-        ItemTemplate cropTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(farmBarrel.containedItemTemplateId);
-        return cropTemplate.isFood();
-    }
-
-    static boolean containsNonFoodItem(@NotNull Item item) {
-        FarmBarrel farmBarrel = getOrMakeFarmBarrel(item);
-        ItemTemplate cropTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(farmBarrel.containedItemTemplateId);
-        return !cropTemplate.isFood();
-    }
-
     boolean isAutoResow() {
         return autoResow;
     }
@@ -221,5 +209,9 @@ class FarmBarrel {
 
     int getSupplyQuantity() {
         return supplyQuantity;
+    }
+
+    public Item getWuItem() {
+        return wuItem;
     }
 }
