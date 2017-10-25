@@ -92,8 +92,10 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
 
         if (sowAction.unitTimeJustTicked(counter)) {
             TilePos sowTile = sowAction.getNextSowTile();
-            if (sowTile == null)
+            if (sowTile == null) {
+                sowAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
                 return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+            }
             sowAction.doSkillCheckAndGetPower();
             sowAction.getFarmBarrel().reduceContainedCount(1);
             sowAction.alterTileState(sowTile);
@@ -103,6 +105,7 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
             active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
             performer.getStatus().modifyStamina(-2000.0f);
         }
+        sowAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
         return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
 

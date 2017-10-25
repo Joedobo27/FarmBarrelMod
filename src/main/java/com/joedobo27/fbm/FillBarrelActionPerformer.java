@@ -92,6 +92,7 @@ public class FillBarrelActionPerformer implements ModAction, BehaviourProvider, 
                 fillBarrelAction.getTargetItem().getRealTemplateId());
         fillBarrelAction.subtractBulkTargetCount(moveCount);
         fillBarrelAction.doActionEndMessages();
+        fillBarrelAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
         return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
 

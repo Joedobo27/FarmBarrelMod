@@ -109,10 +109,12 @@ public class EmptyBarrelActionPerformer implements ModAction, BehaviourProvider,
             farmItem.moveToItem(performer, target.getWurmId(), true);
         }catch (NoSuchItemException | NoSuchPlayerException | NoSuchCreatureException e){
             FarmBarrelMod.logger.warning(e.getMessage());
+            farmItem.setWeight(0, true);
             return propagate(action, FINISH_ACTION);
         }
         emptyBarrelAction.getFarmBarrel().reduceContainedCount(moveCount);
         emptyBarrelAction.doActionEndMessages();
+        emptyBarrelAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
         return propagate(action, FINISH_ACTION);
     }
 }

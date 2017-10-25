@@ -12,15 +12,11 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.util.HashMap;
 import java.util.Objects;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 class FarmBarrel {
 
     private boolean autoResow;
     private Item wuItem;
-    private ScheduledExecutorService jsonWritingExecutor;
     private int containedCount;
     private int containedItemTemplateId;
     private double containedQuality;
@@ -44,40 +40,10 @@ class FarmBarrel {
         this.supplyQuantity = supplyQuantity;
     }
 
-    class RunnableJsonUpdater implements Runnable {
-        private final Item farmBarrel;
-        private final ScheduledExecutorService jsonWritingExecutor;
-
-        RunnableJsonUpdater(Item farmBarrel, ScheduledExecutorService jsonWritingExecutor) {
-            this.farmBarrel = farmBarrel;
-            this.jsonWritingExecutor = jsonWritingExecutor;
-        }
-
-        @Override
-        public void run() {
-            doFarmBarrelToInscriptionJson(this.farmBarrel);
-            jsonWritingExecutor.shutdown();
-            try {
-                jsonWritingExecutor.awaitTermination(10, TimeUnit.MINUTES);
-            } catch (InterruptedException e) {
-                FarmBarrelMod.logger.warning(e.getMessage());
-            }
-        }
-    }
-
     synchronized void configureUpdate(boolean autoResow, int sowRadius, int supplyQuantity) {
         this.autoResow = autoResow;
         this.sowRadius = sowRadius;
         this.supplyQuantity = supplyQuantity;
-        this.checkOrQueueScheduledJsonBackup();
-    }
-
-    synchronized private void checkOrQueueScheduledJsonBackup() {
-        if (jsonWritingExecutor.isShutdown()) {
-            jsonWritingExecutor = Executors.newSingleThreadScheduledExecutor();
-            RunnableJsonUpdater runnableJsonUpdater = new RunnableJsonUpdater(this.wuItem, this.jsonWritingExecutor);
-            jsonWritingExecutor.schedule(runnableJsonUpdater, 10, TimeUnit.MINUTES);
-        }
     }
 
     synchronized void reduceContainedCount(int count) {
@@ -129,7 +95,6 @@ class FarmBarrel {
         return itemTemplate.getName();
     }
 
-
     private static void doInscriptionJsonToPOJO(@NotNull Item item) {
         InscriptionData inscriptionData = item.getInscription();
         String jsonString;
@@ -156,25 +121,24 @@ class FarmBarrel {
         jsonReader.close();
     }
 
-    private static void doFarmBarrelToInscriptionJson(Item item) {
-        FarmBarrel farmBarrel = getOrMakeFarmBarrel(item);
+    void doFarmBarrelToInscriptionJson() {
         JsonObjectBuilder builder = Json.createObjectBuilder();
-        if (farmBarrel == null || builder == null)
+        if (builder == null)
             return;
-        builder.add("autoResow", farmBarrel.isAutoResow());
-        builder.add("containedCount", farmBarrel.getContainedCount());
-        builder.add("containedItemTemplateId", farmBarrel.getContainedItemTemplateId());
-        builder.add("containedQuality", farmBarrel.getContainedQuality());
-        builder.add("sowRadius", farmBarrel.getSowRadius());
-        builder.add("supplyQuantity", farmBarrel.getSupplyQuantity());
+        builder.add("autoResow", this.isAutoResow());
+        builder.add("containedCount", this.getContainedCount());
+        builder.add("containedItemTemplateId", this.getContainedItemTemplateId());
+        builder.add("containedQuality", this.getContainedQuality());
+        builder.add("sowRadius", this.getSowRadius());
+        builder.add("supplyQuantity", this.getSupplyQuantity());
 
         Writer writer = new StringWriter();
         JsonWriter jsonWriter = Json.createWriter(writer);
         jsonWriter.writeObject(builder.build());
         String s = jsonWriter.toString();
         jsonWriter.close();
-        synchronized (Objects.requireNonNull(item)) {
-            item.setInscription(s, "");
+        synchronized (Objects.requireNonNull(this.wuItem)) {
+            this.wuItem.setInscription(s, "");
         }
     }
 
@@ -209,9 +173,5 @@ class FarmBarrel {
 
     int getSupplyQuantity() {
         return supplyQuantity;
-    }
-
-    public Item getWuItem() {
-        return wuItem;
     }
 }

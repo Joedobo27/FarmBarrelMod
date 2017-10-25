@@ -37,7 +37,8 @@ public class ConfigureSeedBarrelQuestion implements ModQuestion {
 
             if (autoResow != this.farmBarrel.isAutoResow() || sowRadius != this.farmBarrel.getSowRadius() ||
                     supplyQuantity != this.farmBarrel.getSupplyQuantity()) {
-                farmBarrel.configureUpdate(autoResow, sowRadius, supplyQuantity);
+                this.farmBarrel.configureUpdate(autoResow, sowRadius, supplyQuantity);
+                this.farmBarrel.doFarmBarrelToInscriptionJson();
             }
         }
     }

@@ -104,6 +104,7 @@ class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerf
         active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
         performer.getStatus().modifyStamina(-10000.0f);
         harvestAction.doActionEndMessages();
+        harvestAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
         return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
 
