@@ -14,6 +14,7 @@ import com.wurmonline.server.skills.SkillList;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
+import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import static com.joedobo27.libs.action.ActionFailureFunction.*;
+import static com.joedobo27.libs.action.ActionTypes.ACTION_NON_LIBILAPRIEST;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
 public class EmptyBarrelActionPerformer implements ModAction, BehaviourProvider, ActionPerformer {
@@ -37,7 +39,10 @@ public class EmptyBarrelActionPerformer implements ModAction, BehaviourProvider,
     private static class SingletonHelper {
         private static final EmptyBarrelActionPerformer _performer;
         static {
-            _performer = new EmptyBarrelActionPerformer(Actions.EMPTY, Actions.actionEntrys[Actions.EMPTY]);
+            int transferActionId = ModActions.getNextActionId();
+            _performer = new EmptyBarrelActionPerformer(transferActionId,
+                    ActionEntry.createEntry((short) transferActionId, "Transfer", "transferring",
+                            new int[] {}));
         }
     }
 
@@ -64,16 +69,15 @@ public class EmptyBarrelActionPerformer implements ModAction, BehaviourProvider,
 
     @Override
     public boolean action(Action action, Creature performer, Item active, Item target, short actionId, float counter) {
-        if (actionId != this.actionId || active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId()
-                || target == null || (!target.isBulkContainer() && !target.isCrate()))
-            return propagate(action);
+        if (actionId != this.actionId || target == null || active == null ||
+                active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
+                (!target.isBulkContainer() && !target.isCrate()))
+            return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
 
         EmptyBarrelAction emptyBarrelAction = EmptyBarrelAction.getEmptyBarrelAction(action);
-        if (emptyBarrelAction == null){
+        if (emptyBarrelAction == null) {
             ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_TILE_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_TILE_ACTION));
 
             ConfigureOptions.ActionOptions options = ConfigureOptions.getInstance().getEmptyBarrelAction();
             emptyBarrelAction = new EmptyBarrelAction(action, performer, active, SkillList.MISCELLANEOUS, options.getMinSkill(),
@@ -82,26 +86,26 @@ public class EmptyBarrelActionPerformer implements ModAction, BehaviourProvider,
         }
 
         if (emptyBarrelAction.isActionStartTime(counter) && emptyBarrelAction.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION);
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
         if (emptyBarrelAction.isActionStartTime(counter)) {
             emptyBarrelAction.doActionStartMessages();
             emptyBarrelAction.setInitialTime(this.actionEntry);
             active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
             performer.getStatus().modifyStamina(-1000.0f);
-            return propagate(action, CONTINUE_ACTION);
+            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
         }
 
         if (!emptyBarrelAction.isActionTimedOut(action, counter)) {
-            return propagate(action, CONTINUE_ACTION);
+            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
         }
         if (emptyBarrelAction.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION);
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
 
         Item farmItem = emptyBarrelAction.makeItem();
         if (farmItem == null)
-            return propagate(action, FINISH_ACTION);
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
         int moveCount = emptyBarrelAction.getMoveCount();
 
         farmItem.setWeight(farmItem.getWeightGrams() * moveCount, false);
@@ -110,11 +114,11 @@ public class EmptyBarrelActionPerformer implements ModAction, BehaviourProvider,
         }catch (NoSuchItemException | NoSuchPlayerException | NoSuchCreatureException e){
             FarmBarrelMod.logger.warning(e.getMessage());
             farmItem.setWeight(0, true);
-            return propagate(action, FINISH_ACTION);
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
         }
         emptyBarrelAction.getFarmBarrel().reduceContainedCount(moveCount);
         emptyBarrelAction.doActionEndMessages();
         emptyBarrelAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
-        return propagate(action, FINISH_ACTION);
+        return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
 }

@@ -7,6 +7,7 @@ import com.wurmonline.server.behaviours.Actions;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemList;
+import com.wurmonline.server.items.ItemTemplate;
 import com.wurmonline.server.skills.SkillList;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
@@ -47,12 +48,12 @@ public class FillBarrelActionPerformer implements ModAction, BehaviourProvider, 
         if (active == null || target == null || active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
                 target.getTemplateId() != ItemList.bulkItem)
             return BehaviourProvider.super.getBehavioursFor(performer, active, target);
-        return Collections.singletonList(Actions.actionEntrys[Actions.FILL]);
+        return Collections.singletonList(Actions.actionEntrys[this.actionId]);
     }
 
     @Override
     public boolean action(Action action, Creature performer, Item active, Item target, short actionId, float counter) {
-        if (actionId != Actions.FILL || target == null || active == null ||
+        if (actionId != this.actionId || target == null || active == null ||
                 active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() || target.getTemplateId() != ItemList.bulkItem)
             return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
 
@@ -60,9 +61,6 @@ public class FillBarrelActionPerformer implements ModAction, BehaviourProvider, 
         if (fillBarrelAction == null){
             ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_TILE_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_TILE_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_TARGET_NOT_FARM_ITEM));
 
             ConfigureOptions.ActionOptions options = ConfigureOptions.getInstance().getFillBarrelAction();
             fillBarrelAction = new FillBarrelAction(action, performer, active, SkillList.MISCELLANEOUS, options.getMinSkill(),
@@ -75,7 +73,7 @@ public class FillBarrelActionPerformer implements ModAction, BehaviourProvider, 
 
         if (fillBarrelAction.isActionStartTime(counter)) {
             fillBarrelAction.doActionStartMessages();
-            fillBarrelAction.setInitialTime(Actions.actionEntrys[Actions.FILL]);
+            fillBarrelAction.setInitialTime(Actions.actionEntrys[this.actionId]);
             active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
             performer.getStatus().modifyStamina(-1000.0f);
             return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
@@ -88,8 +86,22 @@ public class FillBarrelActionPerformer implements ModAction, BehaviourProvider, 
             return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
         int moveCount = fillBarrelAction.getMoveCount();
+
+        int template = fillBarrelAction.getTargetItem().getRealTemplateId();
+        ItemTemplate seedTemplate = null;
+        try {
+            Integer cropId = Crops.getCropIdFromTemplateId(template);
+            seedTemplate = Crops.getSeedTemplateFromCropId(cropId);
+        } catch (CropsException e){
+            FarmBarrelMod.logger.warning(e.getMessage());
+            fillBarrelAction.getPerformer().getCommunicator().sendNormalServerMessage("" +
+                    "Something went wrong, sorry.");
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+        }
+        if (seedTemplate == null)
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
         fillBarrelAction.getFarmBarrel().increaseContainedCount(moveCount, fillBarrelAction.getTargetItem().getQualityLevel(),
-                fillBarrelAction.getTargetItem().getRealTemplateId());
+                seedTemplate.getTemplateId());
         fillBarrelAction.subtractBulkTargetCount(moveCount);
         fillBarrelAction.doActionEndMessages();
         fillBarrelAction.getFarmBarrel().doFarmBarrelToInscriptionJson();

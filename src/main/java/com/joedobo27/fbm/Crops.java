@@ -1,10 +1,16 @@
 package com.joedobo27.fbm;
 
+import com.joedobo27.libs.TileUtilities;
+import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.items.ItemTemplate;
+import com.wurmonline.server.items.ItemTemplateFactory;
 
 import java.util.Arrays;
 
-public class Crops {
+import static com.joedobo27.fbm.CropsList.*;
+
+class Crops {
 
     private final int number;
     private final String cropName;
@@ -23,32 +29,33 @@ public class Crops {
         this.difficulty = aDifficulty;
     }
 
-    static Integer getCropIdFromTemplateId(int templateId){
+    static int getCropIdFromTemplateId(int templateId) throws CropsException{
         return Arrays.stream(cropTypes)
                 .filter(crops -> crops.productTemplateId == templateId || crops.seedTemplateId == templateId)
                 .mapToInt(crops -> crops.number)
+                .boxed()
                 .findFirst()
-                .orElseGet(null);
+                .orElseThrow(new CropsException("No matching templateId for "+templateId+" in Crops."));
     }
 
-    static byte getTileTypeFromTemplateId(int templateId) {
+    static byte getTileTypeFromTemplateId(int templateId) throws CropsException {
         int cropId = Arrays.stream(cropTypes)
                 .filter(crops -> crops.productTemplateId == templateId || crops.seedTemplateId == templateId)
                 .mapToInt(crops -> crops.number)
                 .findFirst()
-                .orElse(-1);
+                .orElseThrow(new CropsException("No matching templateId for "+templateId+" in Crops."));
         if (cropId < 16) {
             return Tiles.Tile.TILE_FIELD.id;
         }
         return Tiles.Tile.TILE_FIELD2.id;
     }
 
-    static double getDifficultyFromTemplateId(int templateId) {
+    static double getDifficultyFromTemplateId(int templateId) throws CropsException{
         return Arrays.stream(cropTypes)
                 .filter(crops -> crops.productTemplateId == templateId || crops.seedTemplateId == templateId)
                 .mapToDouble(crops -> crops.difficulty)
                 .findFirst()
-                .orElse(0);
+                .orElseThrow(new CropsException("No matching templateId for "+templateId+" in Crops."));
     }
 
     static byte getTileTypeForCropId(int cropId) {
@@ -57,7 +64,56 @@ public class Crops {
         }
         return Tiles.Tile.TILE_FIELD2.id;
     }
-    
+
+    static boolean isScytheHarvested(int tileX, int tileY) {
+        int cropsId = TileUtilities.getFarmTileCropId(TilePos.fromXY(tileX, tileY));
+        switch (cropsId) {
+            case BARLEY:
+            case WHEAT:
+            case RYE:
+            case OAT:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static ItemTemplate getHarvestTemplateFromCropId(int cropId) throws CropsException {
+        if (cropId > cropTypes.length - 1)
+            throw new CropsException("The cropId: "+cropId+", does not exist in Crops.");
+        return Arrays.stream(ItemTemplateFactory.getInstance().getTemplates())
+                .filter(itemTemplate -> itemTemplate.getTemplateId() == cropTypes[cropId].productTemplateId)
+                .findFirst()
+                .orElseThrow(new CropsException("No harvest template found matching cropId: "+cropId));
+    }
+
+    static ItemTemplate getSeedTemplateFromCropId(int cropId) throws CropsException {
+        if (cropId > cropTypes.length - 1)
+            throw new CropsException("The cropId: "+cropId+", does not exist in Crops.");
+        return Arrays.stream(ItemTemplateFactory.getInstance().getTemplates())
+                .filter(itemTemplate -> itemTemplate.getTemplateId() == cropTypes[cropId].seedTemplateId)
+                .findFirst()
+                .orElseThrow(new CropsException("No seed template found matching cropId: "+cropId));
+    }
+
+    static double getDifficultyFromCropId(int cropId) throws CropsException {
+        if (cropId > cropTypes.length - 1)
+            throw new CropsException("The cropId: "+cropId+", does not exist in Crops.");
+        return cropTypes[cropId].difficulty;
+    }
+
+    static String getCropNameFromTemplateId(int templateId) {
+        return Arrays.stream(cropTypes)
+                .filter(crops -> crops.productTemplateId == templateId || crops.seedTemplateId == templateId)
+                .map(crops -> crops.cropName)
+                .findFirst()
+                .orElseThrow(new CropsException("No matching templateId for "+templateId+" in Crops."));
+    }
+
+    public static Crops[] getCropTypes() {
+        return cropTypes;
+    }
+
     static {
         cropTypes = new Crops[] {
                 new Crops(0, "barley", 28, 28, "handfuls", 20.0),

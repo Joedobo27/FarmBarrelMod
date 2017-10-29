@@ -6,10 +6,7 @@ import com.wurmonline.shared.util.MaterialUtilities;
 import org.jetbrains.annotations.NotNull;
 
 import javax.json.*;
-import java.io.Reader;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.io.Writer;
+import java.io.*;
 import java.util.HashMap;
 import java.util.Objects;
 
@@ -52,6 +49,9 @@ class FarmBarrel {
         if (this.containedCount == 0) {
             this.containedQuality = 0.0d;
             this.containedItemTemplateId = NONE_CROP_ID;
+            this.wuItem.setWeight(1000, false);
+            updateBarrelName();
+            return;
         }
 
         ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(this.containedItemTemplateId);
@@ -68,6 +68,7 @@ class FarmBarrel {
         int originalId = this.containedItemTemplateId;
         double qlWeightedAverage = ((this.containedQuality * this.containedCount) + (count * quality)) /
                 (this.containedCount + count);
+        this.containedCount += count;
         this.containedItemTemplateId = itemTemplateId;
 
         ItemTemplate itemTemplate = ItemTemplateFactory.getInstance().getTemplateOrNull(this.containedItemTemplateId);
@@ -81,11 +82,13 @@ class FarmBarrel {
             updateBarrelName();
     }
 
-
     private void updateBarrelName() {
-        String s = MaterialUtilities.getRarityString(this.wuItem.getRarity()) + this.wuItem.getTemplate().getName() +
-                "[" + getCropName() + "]";
-        this.wuItem.setName(s);
+        String name;
+        if (!Objects.equals("", getCropName()))
+            name = this.wuItem.getTemplate().getName() + " [" + getCropName() + "]";
+        else
+            name = this.wuItem.getTemplate().getName();
+        this.wuItem.setName(name);
     }
 
     String getCropName() {
@@ -119,6 +122,9 @@ class FarmBarrel {
             farmBarrels.put(item.getWurmId(), farmBarrel);
         }
         jsonReader.close();
+        try {
+            reader.close();
+        } catch (IOException ignored) {}
     }
 
     void doFarmBarrelToInscriptionJson() {
@@ -135,7 +141,10 @@ class FarmBarrel {
         Writer writer = new StringWriter();
         JsonWriter jsonWriter = Json.createWriter(writer);
         jsonWriter.writeObject(builder.build());
-        String s = jsonWriter.toString();
+        String s = writer.toString();
+        try {
+            writer.close();
+        } catch (IOException ignore) {}
         jsonWriter.close();
         synchronized (Objects.requireNonNull(this.wuItem)) {
             this.wuItem.setInscription(s, "");

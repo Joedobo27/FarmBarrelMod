@@ -12,6 +12,8 @@ import com.wurmonline.shared.util.MaterialUtilities;
 import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 
+import java.util.Objects;
+
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
 
@@ -77,7 +79,11 @@ public class ExamineBarrelActionPerformer implements ModAction, ActionPerformer{
         String cropName = farmBarrel.getCropName();
         int containedCount = farmBarrel.getContainedCount();
         double containedQuality = farmBarrel.getContainedQuality();
-        examineText += String.format(" It has %d of %s at %f quality.", containedCount, cropName, containedQuality);
+        if (Objects.equals("", cropName) || containedCount == 0) {
+            examineText += " It is empty.";
+        }
+        else
+            examineText += String.format(" It has %d of %s at %f quality.", containedCount, cropName, containedQuality);
 
         performer.getCommunicator().sendNormalServerMessage(examineText);
 

@@ -96,12 +96,19 @@ class SowActionPerformer implements ModAction, BehaviourProvider, ActionPerforme
                 sowAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
                 return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
             }
-            sowAction.doSkillCheckAndGetPower();
-            sowAction.getFarmBarrel().reduceContainedCount(1);
-            sowAction.alterTileState(sowTile);
-            sowAction.updateMeshResourceData(sowTile);
-            CropTilePoller.addCropTile(TileUtilities.getSurfaceData(sowTile), sowTile.x, sowTile.y,
-                    Crops.getCropIdFromTemplateId(sowAction.getFarmBarrel().getContainedItemTemplateId()), onSurface);
+            try {
+                CropTilePoller.addCropTile(TileUtilities.getSurfaceData(sowTile), sowTile.x, sowTile.y,
+                        Crops.getCropIdFromTemplateId(sowAction.getFarmBarrel().getContainedItemTemplateId()), onSurface);
+                sowAction.doSkillCheckAndGetPower();
+                sowAction.alterTileState(sowTile);
+                sowAction.updateMeshResourceData(sowTile);
+                sowAction.getFarmBarrel().reduceContainedCount(1);
+            } catch (CropsException e) {
+                FarmBarrelMod.logger.warning(e.getMessage());
+                sowAction.getPerformer().getCommunicator().sendNormalServerMessage("" +
+                        "Something went wrong, sorry.");
+                return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+            }
             active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
             performer.getStatus().modifyStamina(-2000.0f);
         }

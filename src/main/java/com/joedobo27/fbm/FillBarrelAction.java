@@ -8,6 +8,7 @@ import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemTemplate;
 import org.jetbrains.annotations.Nullable;
 
+import java.net.CacheRequest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.WeakHashMap;
@@ -47,11 +48,12 @@ public class FillBarrelAction extends ActionMaster {
 
     void subtractBulkTargetCount(int moveCount) {
         int bulkCount = Integer.parseInt(this.targetItem.getDescription().replaceAll("x",""));
-        int bulkVolume = this.targetItem.getVolume();
+        int bulkTotalVolume = this.targetItem.getWeightGrams(); // bulk items use weight value for volume.
         int moveVolume = this.targetItem.getRealTemplate().getVolume() * moveCount;
-        String newDescription = String.format("%dx", bulkCount - moveCount);
-        this.targetItem.setWeight(bulkVolume - moveCount, true);
-        this.targetItem.setDescription(newDescription);
+        this.targetItem.setWeight(bulkTotalVolume - moveVolume, true);
+        // bulk items use description data for whole unit counts.
+        String newCount = String.format("%dx", bulkCount - moveCount);
+        this.targetItem.setDescription(newCount);
     }
 
     @Nullable static FillBarrelAction getFillBarrelAction(Action action) {
@@ -65,12 +67,33 @@ public class FillBarrelAction extends ActionMaster {
                 .anyMatch(function -> function.apply(this));
         if (standardChecks)
             return true;
-        boolean barrelContentMismatch = targetItem.getRealTemplateId() != this.farmBarrel.getContainedItemTemplateId();
-        if (barrelContentMismatch) {
-
+        boolean fillWithNonFarmSeed = false;
+        try {
+            fillWithNonFarmSeed = Crops.getCropIdFromTemplateId(this.targetItem.getRealTemplateId()) >=
+                    Crops.getCropTypes().length;
+        } catch (CropsException e) {
             getPerformer().getCommunicator().sendNormalServerMessage("" +
-                    "The seed barrel won't hold both "+farmBarrel.getCropName()+" and "+targetItem.getRealTemplate().getName()+".");
+                    "The seed barrel won't hold "+targetItem.getRealTemplate().getName()+".");
             return true;
+        }
+        if (fillWithNonFarmSeed){
+            getPerformer().getCommunicator().sendNormalServerMessage("" +
+                    "The seed barrel won't hold "+targetItem.getRealTemplate().getName()+".");
+            return true;
+        }
+        try {
+            boolean barrelContentMismatch = this.farmBarrel.getContainedItemTemplateId() != -1 &&
+                    Crops.getCropIdFromTemplateId(targetItem.getRealTemplateId()) !=
+                            Crops.getCropIdFromTemplateId(this.farmBarrel.getContainedItemTemplateId());
+            if (barrelContentMismatch) {
+                getPerformer().getCommunicator().sendNormalServerMessage(
+                        String.format("The seed barrel won't hold both %s and %s.",
+                                Crops.getCropNameFromTemplateId(targetItem.getRealTemplateId()),
+                                Crops.getCropNameFromTemplateId(this.farmBarrel.getContainedItemTemplateId())));
+                return true;
+            }
+        } catch (CropsException e) {
+
         }
 
         return false;

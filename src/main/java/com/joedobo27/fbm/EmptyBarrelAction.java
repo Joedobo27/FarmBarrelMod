@@ -82,8 +82,14 @@ class EmptyBarrelAction extends ActionMaster {
         if (itemTemplate == null)
             return 0;
         int[] counts;
-        int targetVolume = this.targetItem.getFreeVolume();
-        int targetBulkCount = targetVolume / itemTemplate.getVolume();
+        int targetBulkCount;
+        if (!this.targetItem.isCrate()) {
+            int targetVolume = this.targetItem.getFreeVolume();
+            targetBulkCount = targetVolume / itemTemplate.getVolume();
+        }
+        else {
+            targetBulkCount = this.targetItem.getRemainingCrateSpace();
+        }
         int containedCount = this.farmBarrel.getContainedCount();
         counts = new int[]{targetBulkCount, containedCount};
         Arrays.sort(counts);

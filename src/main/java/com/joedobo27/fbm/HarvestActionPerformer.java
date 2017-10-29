@@ -4,6 +4,8 @@ package com.joedobo27.fbm;
 import com.joedobo27.libs.TileUtilities;
 import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
+import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.*;
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.creatures.Creature;
@@ -14,6 +16,7 @@ import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -50,7 +53,7 @@ class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerf
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item active, int tileX, int tileY, boolean onSurface,
                                               int encodedTile) {
-        if (active == null || active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
+        if (active == null || !Crops.isScytheHarvested(tileX, tileY) || active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
                 !TileUtilities.isFarmTile(encodedTile))
             return BehaviourProvider.super.getBehavioursFor(performer, active, tileX, tileY, onSurface, encodedTile);
         return Collections.singletonList(Actions.actionEntrys[Actions.HARVEST]);
@@ -96,14 +99,35 @@ class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerf
         if (harvestAction.hasAFailureCondition())
             return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
-        double power = harvestAction.doSkillCheckAndGetPower(counter);
+        try {
+            double power = harvestAction.doSkillCheckAndGetPower(counter);
+        } catch (CropsException e) {
+            FarmBarrelMod.logger.warning(e.getMessage());
+            harvestAction.getPerformer().getCommunicator().sendNormalServerMessage("" +
+                    "Something went wrong, sorry.");
+            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+        }
         int harvestYield = harvestAction.getYield();
-        harvestAction.alterTileState();
-        harvestAction.getFarmBarrel().increaseContainedCount(harvestYield, power,
-                TileUtilities.getItemTemplateFromHarvestTile(harvestAction.getTargetTile()).getTemplateId());
+        int cropId = TileUtilities.getFarmTileCropId(harvestAction.getTargetTile());
+
+        if (harvestAction.getFarmBarrel().isAutoResow()) {
+            byte newTileTypeId = Crops.getTileTypeForCropId(cropId);
+            byte newTileData = TileUtilities.encodeSurfaceFarmTileData(false, 0,
+                    cropId);
+            harvestAction.alterTileState(newTileTypeId, newTileData);
+            harvestAction.updateMeshResourceData();
+            harvestYield --;
+        }
+        else {
+            harvestAction.alterTileState(Tiles.Tile.TILE_DIRT.id, (byte) 0);
+            Server.setWorldResource(harvestAction.getTargetTile().x, harvestAction.getTargetTile().y, 0);
+        }
+        double farmKnowledge = performer.getSkills().getSkillOrLearn(harvestAction.getUsedSkill()).getKnowledge();
+        harvestAction.getFarmBarrel().increaseContainedCount(harvestYield, farmKnowledge,
+                Crops.getHarvestTemplateFromCropId(cropId).getTemplateId());
         active.setDamage(active.getDamage() + 0.0015f * active.getDamageModifier());
         performer.getStatus().modifyStamina(-10000.0f);
-        harvestAction.doActionEndMessages();
+        harvestAction.doActionEndMessages(harvestYield);
         harvestAction.getFarmBarrel().doFarmBarrelToInscriptionJson();
         return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }

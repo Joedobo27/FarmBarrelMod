@@ -12,6 +12,7 @@ import org.gotti.wurmunlimited.modsupport.questions.ModQuestions;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.WeakHashMap;
 
 import static com.joedobo27.libs.action.ActionTypes.ACTION_NON_LIBILAPRIEST;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
@@ -66,8 +67,9 @@ public class ConfigureSeedBarrelActionPerformer implements ModAction, BehaviourP
         if (actionId != this.actionId || target.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() ||
                 target.getWurmId() == -10L)
             return propagate(action);
+        ConfigureSeedBarrelQuestion barrelQuestion;
         FarmBarrel farmBarrel = FarmBarrel.getOrMakeFarmBarrel(target);
-        ConfigureSeedBarrelQuestion barrelQuestion = new ConfigureSeedBarrelQuestion(farmBarrel,
+        barrelQuestion = new ConfigureSeedBarrelQuestion(farmBarrel,
                 ConfigureOptions.getInstance().getConfigureBarrelQuestionId());
         barrelQuestion.sendQuestion(ModQuestions.createQuestion(performer, "Configure Barrel", "Configure this how?",
                 target.getWurmId(), barrelQuestion));

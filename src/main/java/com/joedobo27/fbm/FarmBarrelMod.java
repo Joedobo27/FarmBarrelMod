@@ -80,7 +80,7 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         sowBarrel.size(3);
         //sowBarrel.descriptions();
         sowBarrel.itemTypes(new short[]{ItemTypes.ITEM_TYPE_WOOD, ItemTypes.ITEM_TYPE_NAMED, ItemTypes.ITEM_TYPE_REPAIRABLE,
-                ItemTypes.ITEM_TYPE_COLORABLE, ItemTypes.ITEM_TYPE_HASDATA});
+                ItemTypes.ITEM_TYPE_COLORABLE, ItemTypes.ITEM_TYPE_CAN_HAVE_INSCRIPTION});
         sowBarrel.imageNumber((short) 245);
         sowBarrel.behaviourType((short) 1);
         sowBarrel.combatDamage(0);
@@ -110,6 +110,7 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         ModActions.registerAction(configure);
 
         EmptyBarrelActionPerformer empty = EmptyBarrelActionPerformer.getEmptyBarrelActionPerformer();
+        ModActions.registerAction(empty.getActionEntry());
         ModActions.registerAction(empty);
         setActionEntryMaxRangeReflect(empty.getActionEntry(), 8, logger);
 

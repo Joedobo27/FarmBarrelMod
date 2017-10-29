@@ -65,7 +65,7 @@ class SowAction extends ActionMaster {
                 .forEach(X -> IntStream.range(westY, eastY + 1)
                         .forEach(Y -> {
                             TilePos tilePos = TilePos.fromXY(X, Y);
-                            if (isValidSowTile(tilePos))
+                            if (isValidSowTile(tilePos) && sowTiles.size() < this.farmBarrel.getContainedCount())
                                  sowTiles.add(tilePos);
                         }));
         synchronized (this) {
@@ -83,7 +83,7 @@ class SowAction extends ActionMaster {
             return false;
 
         // is the tile flat enough?
-        if (!Terraforming.isFlat(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface(),
+        if (!Terraforming.isFlat(tilePos.x, tilePos.y, this.performer.isOnSurface(),
                 ConfigureOptions.getInstance().getMaxSowingSlope())) {
             return false;
         }
@@ -96,15 +96,15 @@ class SowAction extends ActionMaster {
         }
 
         // land or water plant mismatch.
-        boolean isUnderWater = Terraforming.isCornerUnderWater(this.targetTile.x, this.targetTile.y,
+        boolean isUnderWater = Terraforming.isCornerUnderWater(tilePos.x, tilePos.y,
                 this.performer.isOnSurface());
 
         boolean isWaterPlant = itemTemplate.getTemplateId() == ItemList.rice ||
-                itemTemplate.getTemplateId() == ItemList.reedSeed;
+                itemTemplate.getTemplateId() == ItemList.reedSeed || itemTemplate.getTemplateId() == ItemList.reed;
         if (isUnderWater && !isWaterPlant) {
             return false;
         }
-        if (isWaterPlant && !Terraforming.isAllCornersInsideHeightRange(this.targetTile.x, this.targetTile.y,
+        if (isWaterPlant && !Terraforming.isAllCornersInsideHeightRange(tilePos.x, tilePos.y,
                 this.performer.isOnSurface(), (short)(-1), (short)(-4))) {
             return false;
         }
@@ -122,7 +122,7 @@ class SowAction extends ActionMaster {
             return false;
 
         // village permissions
-        Village village = Zones.getVillage(this.targetTile.x, this.targetTile.y, this.performer.isOnSurface());
+        Village village = Zones.getVillage(tilePos.x, tilePos.y, this.performer.isOnSurface());
         if (village != null &&
                 !village.isActionAllowed(this.action.getNumber(), this.performer,
                         false, TileUtilities.getSurfaceEncodedValue(this.getTargetTile()),
@@ -131,11 +131,11 @@ class SowAction extends ActionMaster {
             return false;
         if (village != null && !village.isActionAllowed(this.action.getNumber(), this.performer, false,
                 TileUtilities.getSurfaceEncodedValue(this.getTargetTile()), 0) &&
-                !Zones.isOnPvPServer(this.targetTile.x,this.targetTile.y))
+                !Zones.isOnPvPServer(tilePos.x,tilePos.y))
             return false;
 
         // god protected
-        if (Zones.isTileProtected(this.targetTile.x, this.targetTile.y))
+        if (Zones.isTileProtected(tilePos.x, tilePos.y))
             return false;
 
         return true;
@@ -190,7 +190,7 @@ class SowAction extends ActionMaster {
         return false;
     }
 
-    double doSkillCheckAndGetPower() {
+    double doSkillCheckAndGetPower() throws CropsException {
         if (this.usedSkill == null)
             return 1.0d;
         double difficulty = Crops.getDifficultyFromTemplateId(farmBarrel.getContainedItemTemplateId());
@@ -199,10 +199,13 @@ class SowAction extends ActionMaster {
                         0, false, this.actionTimeTenthSecond/10));
     }
 
-    void alterTileState(TilePos sowTile) {
-        byte newFarmTile = Crops.getTileTypeFromTemplateId(this.farmBarrel.getContainedItemTemplateId());
-        TileUtilities.setSurfaceTypeId(sowTile, newFarmTile);
-        Server.modifyFlagsByTileType(sowTile.x, sowTile.y, newFarmTile);
+    void alterTileState(TilePos sowTile) throws CropsException {
+        byte newTileTypeId = Crops.getTileTypeFromTemplateId(this.farmBarrel.getContainedItemTemplateId());
+        byte newTileData = TileUtilities.encodeSurfaceFarmTileData(false, 0,
+                    Crops.getCropIdFromTemplateId(this.farmBarrel.getContainedItemTemplateId()));
+        Server.surfaceMesh.setTile(sowTile.x, sowTile.y, Tiles.encode(TileUtilities.getSurfaceHeight(sowTile),
+                newTileTypeId, newTileData));
+        Server.modifyFlagsByTileType(sowTile.x, sowTile.y, newTileTypeId);
         Players.getInstance().sendChangedTile(sowTile.x, sowTile.y, performer.isOnSurface(), true);
         Zone zone = TileUtilities.getZoneSafe(sowTile, this.performer.isOnSurface());
         if (zone != null)
