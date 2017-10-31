@@ -58,13 +58,6 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
 
     @Override
     public void init() {
-        //TODO Can't directly sow with harvested crops even when those crops are something that we should be able
-        //TODO   to sow with. One can only sow with things taken from a bulk bin.
-        //TODO Add an optional barrel configuration that will automatically replant whatever it just harvested.
-        //TODO add a way to harvest bushes/Trees.
-        //TODO switch the barrel data state mechanics from using data1&2 fields to using a serialized
-        //TODO   object > base64 string > inscription DB entry.
-
         try {
             ModActions.init();
         } catch (Exception e) {
@@ -120,13 +113,17 @@ public class FarmBarrelMod implements WurmServerMod, Initable, Configurable, Ite
         FillBarrelActionPerformer fill = FillBarrelActionPerformer.getFillBarrelActionPerformer();
         ModActions.registerAction(fill);
 
-        HarvestActionPerformer harvest = HarvestActionPerformer.getHarvestActionPerformer();
-        ModActions.registerAction(harvest);
-        setActionEntryMaxRangeReflect(harvest.getActionEntry(), 8, logger);
+        HarvestCropActionPerformer harvestCrop = HarvestCropActionPerformer.getHarvestActionPerformer();
+        ModActions.registerAction(harvestCrop);
+        setActionEntryMaxRangeReflect(harvestCrop.getActionEntry(), 8, logger);
 
         SowActionPerformer sow = SowActionPerformer.getSowActionPerformer();
         ModActions.registerAction(sow);
         setActionEntryMaxRangeReflect(sow.getActionEntry(), 8, logger);
+
+        HarvestTreeActionPerformer harvestTree = HarvestTreeActionPerformer.getHarvestTreeActionPerformer();
+        ModActions.registerAction(harvestTree);
+        setActionEntryMaxRangeReflect(harvestTree.getActionEntry(), 8, logger);
 
         AdvancedCreationEntry sowBarrel = CreationEntryCreator.createAdvancedEntry(SkillList.CARPENTRY,
                 ItemList.plank, ItemList.pegWood, sowBarrelTemplateId, false, false, 0.0f, true, false,

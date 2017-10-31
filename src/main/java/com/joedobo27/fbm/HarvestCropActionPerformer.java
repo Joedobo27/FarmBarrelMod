@@ -16,7 +16,6 @@ import org.gotti.wurmunlimited.modsupport.actions.BehaviourProvider;
 import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -24,20 +23,20 @@ import java.util.function.Function;
 import static com.joedobo27.libs.action.ActionFailureFunction.*;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
-class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerformer {
+class HarvestCropActionPerformer implements ModAction, BehaviourProvider, ActionPerformer {
 
     private final short actionId;
     private final ActionEntry actionEntry;
 
-    HarvestActionPerformer(short actionId, ActionEntry actionEntry){
+    HarvestCropActionPerformer(short actionId, ActionEntry actionEntry){
         this.actionId = actionId;
         this.actionEntry = actionEntry;
     }
 
     private static class SingletonHelper {
-        private static final HarvestActionPerformer _performer;
+        private static final HarvestCropActionPerformer _performer;
         static {
-            _performer = new HarvestActionPerformer( Actions.HARVEST, Actions.actionEntrys[Actions.HARVEST]);
+            _performer = new HarvestCropActionPerformer( Actions.HARVEST, Actions.actionEntrys[Actions.HARVEST]);
         }
     }
 
@@ -66,7 +65,7 @@ class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerf
                 active.getTemplateId() != FarmBarrelMod.getSowBarrelTemplateId() || !TileUtilities.isFarmTile(encodedTile))
             return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
 
-        HarvestAction harvestAction = HarvestAction.getHarvestAction(action);
+        HarvestCropAction harvestAction = HarvestCropAction.getHarvestCropAction(action);
         if (harvestAction == null) {
             ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
@@ -76,8 +75,8 @@ class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerf
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_TOON_HOLDING_MAX_WEIGHT));
 
 
-            ConfigureOptions.ActionOptions options = ConfigureOptions.getInstance().getHarvestAction();
-            harvestAction = new HarvestAction(action, performer, active, SkillList.FARMING, options.getMinSkill(),
+            ConfigureOptions.ActionOptions options = ConfigureOptions.getInstance().getHarvestCropAction();
+            harvestAction = new HarvestCropAction(action, performer, active, SkillList.FARMING, options.getMinSkill(),
                     options.getMaxSkill(), options.getLongestTime(), options.getShortestTime(), options.getMinimumStamina(),
                     failureTestFunctions, TilePos.fromXY(tileX, tileY), FarmBarrel.getOrMakeFarmBarrel(active));
         }
@@ -132,7 +131,7 @@ class HarvestActionPerformer implements ModAction, BehaviourProvider, ActionPerf
         return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
 
-    static HarvestActionPerformer getHarvestActionPerformer() {
+    static HarvestCropActionPerformer getHarvestActionPerformer() {
         return SingletonHelper._performer;
     }
 }

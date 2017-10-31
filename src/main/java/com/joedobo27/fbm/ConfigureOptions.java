@@ -16,10 +16,12 @@ class ConfigureOptions {
     private ArrayList<Integer> skillUnlockPoints;
     private ActionOptions emptyBarrelAction;
     private ActionOptions fillBarrelAction;
-    private ActionOptions harvestAction;
+    private ActionOptions harvestCropAction;
     private ActionOptions sowAction;
+    private ActionOptions harvestTreeAction;
     private int configureBarrelQuestionId;
-    private HarvestYieldOptions sowYieldScaling;
+    private CropYieldOptions cropYieldScaling;
+    private TreeYieldOptions treeYieldScaling;
     private int maxSowingSlope;
 
     private static final ConfigureOptions instance;
@@ -66,7 +68,7 @@ class ConfigureOptions {
         }
     }
 
-    class HarvestYieldOptions {
+    class CropYieldOptions {
         private final double minimumBaseYield;
         private final double maximumBaseYield;
         private final double minimumSkill;
@@ -76,9 +78,9 @@ class ConfigureOptions {
         private final double minimumFarmChance;
         private final double maximumFarmChance;
 
-        HarvestYieldOptions(double minimumBaseYield, double maximumBaseYield, double minimumSkill, double maximumSkill,
-                            double minimumBonusYield, double maximumBonusYield, double minimumFarmChance,
-                            double maximumFarmChance) {
+        CropYieldOptions(double minimumBaseYield, double maximumBaseYield, double minimumSkill, double maximumSkill,
+                         double minimumBonusYield, double maximumBonusYield, double minimumFarmChance,
+                         double maximumFarmChance) {
             this.minimumBaseYield = minimumBaseYield;
             this.maximumBaseYield = maximumBaseYield;
             this.minimumSkill = minimumSkill;
@@ -89,12 +91,58 @@ class ConfigureOptions {
             this.maximumFarmChance = maximumFarmChance;
         }
 
-        public double getMinimumBaseYield() {
+        double getMinimumBaseYield() {
             return minimumBaseYield;
         }
 
-        public double getMaximumBaseYield() {
+        double getMaximumBaseYield() {
             return maximumBaseYield;
+        }
+
+        double getMinimumSkill() {
+            return minimumSkill;
+        }
+
+        double getMaximumSkill() {
+            return maximumSkill;
+        }
+
+        double getMinimumBonusYield() {
+            return minimumBonusYield;
+        }
+
+        double getMaximumBonusYield() {
+            return maximumBonusYield;
+        }
+
+        double getMinimumFarmChance() {
+            return minimumFarmChance;
+        }
+
+        double getMaximumFarmChance() {
+            return maximumFarmChance;
+        }
+    }
+
+    class TreeYieldOptions {
+        private final double minimumYield;
+        private final double maximumYield;
+        private final double minimumSkill;
+        private final double maximumSkill;
+
+        TreeYieldOptions(double minimumYield, double maximumYield, double minimumSkill, double maximumSkill) {
+            this.minimumYield = minimumYield;
+            this.maximumYield = maximumYield;
+            this.minimumSkill = minimumSkill;
+            this.maximumSkill = maximumSkill;
+        }
+
+        public double getMinimumYield() {
+            return minimumYield;
+        }
+
+        public double getMaximumYield() {
+            return maximumYield;
         }
 
         public double getMinimumSkill() {
@@ -103,22 +151,6 @@ class ConfigureOptions {
 
         public double getMaximumSkill() {
             return maximumSkill;
-        }
-
-        public double getMinimumBonusYield() {
-            return minimumBonusYield;
-        }
-
-        public double getMaximumBonusYield() {
-            return maximumBonusYield;
-        }
-
-        public double getMinimumFarmChance() {
-            return minimumFarmChance;
-        }
-
-        public double getMaximumFarmChance() {
-            return maximumFarmChance;
         }
     }
 
@@ -129,12 +161,15 @@ class ConfigureOptions {
                 DEFAULT_ACTION_OPTION));
         instance.fillBarrelAction = doPropertiesToActionOptions(properties.getProperty("fillBarrelAction",
                 DEFAULT_ACTION_OPTION));
-        instance.harvestAction = doPropertiesToActionOptions(properties.getProperty("harvestAction",
+        instance.harvestCropAction = doPropertiesToActionOptions(properties.getProperty("harvestCropAction",
                 DEFAULT_ACTION_OPTION));
         instance.sowAction = doPropertiesToActionOptions(properties.getProperty("sowAction",
                 DEFAULT_ACTION_OPTION));
+        instance.harvestTreeAction = doPropertiesToActionOptions(properties.getProperty("harvestTreeAction",
+                DEFAULT_ACTION_OPTION));
         instance.configureBarrelQuestionId = Integer.parseInt(properties.getProperty("configureBarrelQuestionId"));
-        instance.sowYieldScaling = doPropertiesToYieldOptions(properties.getProperty("sowYieldScaling"));
+        instance.cropYieldScaling = doPropertiesToCropYieldOptions(properties.getProperty("cropYieldScaling"));
+        instance.treeYieldScaling = doPropertiesToTreeYieldOptions(properties.getProperty("treeYieldScaling"));
         instance.maxSowingSlope = Integer.parseInt(properties.getProperty("maxSowingSlope"));
     }
 
@@ -146,11 +181,11 @@ class ConfigureOptions {
                 DEFAULT_ACTION_OPTION));
         instance.fillBarrelAction = doPropertiesToActionOptions(properties.getProperty("fillBarrelAction",
                 DEFAULT_ACTION_OPTION));
-        instance.harvestAction = doPropertiesToActionOptions(properties.getProperty("harvestAction",
+        instance.harvestCropAction = doPropertiesToActionOptions(properties.getProperty("harvestCropAction",
                 DEFAULT_ACTION_OPTION));
         instance.sowAction = doPropertiesToActionOptions(properties.getProperty("sowAction",
                 DEFAULT_ACTION_OPTION));
-        instance.sowYieldScaling = doPropertiesToYieldOptions(properties.getProperty("sowYieldScaling"));
+        instance.cropYieldScaling = doPropertiesToCropYieldOptions(properties.getProperty("cropYieldScaling"));
         instance.configureBarrelQuestionId = Integer.parseInt(properties.getProperty("configureBarrelQuestionId"));
         instance.maxSowingSlope = Integer.parseInt(properties.getProperty("maxSowingSlope"));
     }
@@ -175,7 +210,7 @@ class ConfigureOptions {
         return instance.new ActionOptions(minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
     }
 
-    private static HarvestYieldOptions doPropertiesToYieldOptions(String values) {
+    private static CropYieldOptions doPropertiesToCropYieldOptions(String values) {
         Reader reader = new StringReader(values);
         JsonReader jsonReader = Json.createReader(reader);
         JsonObject jsonObject = jsonReader.readObject();
@@ -187,8 +222,19 @@ class ConfigureOptions {
         double maximumBonusYield = jsonObject.getJsonNumber("maximumBonusYield").doubleValue();
         double minimumFarmChance = jsonObject.getJsonNumber("minimumFarmChance").doubleValue();
         double maximumFarmChance = jsonObject.getJsonNumber("maximumFarmChance").doubleValue();
-        return instance.new HarvestYieldOptions(minimumBaseYield, maximumBaseYield, minimumSkill, maximumSkill, minimumBonusYield,
+        return instance.new CropYieldOptions(minimumBaseYield, maximumBaseYield, minimumSkill, maximumSkill, minimumBonusYield,
                 maximumBonusYield, minimumFarmChance, maximumFarmChance);
+    }
+
+    private static TreeYieldOptions doPropertiesToTreeYieldOptions(String values) {
+        Reader reader = new StringReader(values);
+        JsonReader jsonReader = Json.createReader(reader);
+        JsonObject jsonObject = jsonReader.readObject();
+        double minimumBaseYield = jsonObject.getJsonNumber("minimumYield").doubleValue();
+        double maximumBaseYield = jsonObject.getJsonNumber("maximumYield").doubleValue();
+        double minimumSkill = jsonObject.getJsonNumber("minimumSkill").doubleValue();
+        double maximumSkill = jsonObject.getJsonNumber("maximumSkill").doubleValue();
+        return instance.new TreeYieldOptions(minimumBaseYield, maximumBaseYield, minimumSkill, maximumSkill);
     }
 
     private static Properties getProperties() {
@@ -232,20 +278,28 @@ class ConfigureOptions {
         return fillBarrelAction;
     }
 
-    ActionOptions getHarvestAction() {
-        return harvestAction;
+    ActionOptions getHarvestCropAction() {
+        return harvestCropAction;
     }
 
     ActionOptions getSowAction() {
         return sowAction;
     }
 
+    public ActionOptions getHarvestTreeAction() {
+        return harvestTreeAction;
+    }
+
     int getConfigureBarrelQuestionId() {
         return configureBarrelQuestionId;
     }
 
-    HarvestYieldOptions getSowYieldScaling() {
-        return sowYieldScaling;
+    CropYieldOptions getCropYieldScaling() {
+        return cropYieldScaling;
+    }
+
+    public TreeYieldOptions getTreeYieldScaling() {
+        return treeYieldScaling;
     }
 
     int getMaxSowingSlope() {

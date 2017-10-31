@@ -6,6 +6,8 @@ import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
 import com.wurmonline.server.items.ItemTemplate;
+import com.wurmonline.server.items.ItemTemplateFactory;
+import com.wurmonline.server.items.NoSuchTemplateException;
 import org.jetbrains.annotations.Nullable;
 
 import java.net.CacheRequest;
@@ -67,20 +69,34 @@ public class FillBarrelAction extends ActionMaster {
                 .anyMatch(function -> function.apply(this));
         if (standardChecks)
             return true;
-        boolean fillWithNonFarmSeed = false;
+
+        boolean fillWithNonFarmSeed;
         try {
             fillWithNonFarmSeed = Crops.getCropIdFromTemplateId(this.targetItem.getRealTemplateId()) >=
                     Crops.getCropTypes().length;
         } catch (CropsException e) {
-            getPerformer().getCommunicator().sendNormalServerMessage("" +
-                    "The seed barrel won't hold "+targetItem.getRealTemplate().getName()+".");
+            getPerformer().getCommunicator().sendNormalServerMessage(
+                    String.format("The %s can't be sown thus the barrel can't be filled with it." ,
+                            targetItem.getRealTemplate().getName()+"."));
             return true;
         }
         if (fillWithNonFarmSeed){
-            getPerformer().getCommunicator().sendNormalServerMessage("" +
-                    "The seed barrel won't hold "+targetItem.getRealTemplate().getName()+".");
+            getPerformer().getCommunicator().sendNormalServerMessage(
+                    String.format("The %s can't be sown thus the barrel can't be filled with it." ,
+                            targetItem.getRealTemplate().getName()+"."));
             return true;
         }
+
+        ItemTemplate barrelItemTemplate = null;
+        if (this.farmBarrel.getContainedItemTemplateId() != -1) {
+            try {
+                barrelItemTemplate = ItemTemplateFactory.getInstance().getTemplate(this.farmBarrel.getContainedItemTemplateId());
+            } catch (NoSuchTemplateException e) {
+                FarmBarrelMod.logger.warning("No item template found for contained barrel item.");
+                return true;
+            }
+        }
+
         try {
             boolean barrelContentMismatch = this.farmBarrel.getContainedItemTemplateId() != -1 &&
                     Crops.getCropIdFromTemplateId(targetItem.getRealTemplateId()) !=
@@ -93,7 +109,10 @@ public class FillBarrelAction extends ActionMaster {
                 return true;
             }
         } catch (CropsException e) {
-
+            getPerformer().getCommunicator().sendNormalServerMessage(
+                    String.format("One of these is not a valid sowing crop: barrel item and target, %s and %s.",
+                            barrelItemTemplate.getName(), targetItem.getRealTemplate().getName()));
+            return true;
         }
 
         return false;

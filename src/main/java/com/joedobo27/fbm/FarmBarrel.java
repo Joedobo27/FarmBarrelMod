@@ -68,6 +68,7 @@ class FarmBarrel {
         int originalId = this.containedItemTemplateId;
         double qlWeightedAverage = ((this.containedQuality * this.containedCount) + (count * quality)) /
                 (this.containedCount + count);
+        qlWeightedAverage = Math.min(100d, qlWeightedAverage);
         this.containedCount += count;
         this.containedItemTemplateId = itemTemplateId;
 

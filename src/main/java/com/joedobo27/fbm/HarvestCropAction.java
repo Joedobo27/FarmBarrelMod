@@ -22,18 +22,18 @@ import java.util.Arrays;
 import java.util.WeakHashMap;
 import java.util.function.Function;
 
-class HarvestAction extends ActionMaster {
+class HarvestCropAction extends ActionMaster {
 
     private final TilePos targetTile;
     private final FarmBarrel farmBarrel;
     private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
 
-    private static WeakHashMap<Action, HarvestAction> performers = new WeakHashMap<>();
+    private static WeakHashMap<Action, HarvestCropAction> performers = new WeakHashMap<>();
 
-    HarvestAction(Action action, Creature performer, @NotNull Item activeTool, @NotNull Integer usedSkill,
-                            int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina,
-                            ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetTile,
-                            FarmBarrel farmBarrel) {
+    HarvestCropAction(Action action, Creature performer, @NotNull Item activeTool, @NotNull Integer usedSkill,
+                      int minSkill, int maxSkill, int longestTime, int shortestTime, int minimumStamina,
+                      ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetTile,
+                      FarmBarrel farmBarrel) {
         super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
         this.failureTestFunctions = failureTestFunctions;
         this.targetTile = targetTile;
@@ -41,7 +41,7 @@ class HarvestAction extends ActionMaster {
         performers.put(action, this);
     }
 
-    @Nullable static HarvestAction getHarvestAction(Action action) {
+    @Nullable static HarvestCropAction getHarvestCropAction(Action action) {
         if (!performers.containsKey(action))
             return null;
         return performers.get(action);
@@ -88,7 +88,7 @@ class HarvestAction extends ActionMaster {
     }
 
     int getYield() {
-        ConfigureOptions.HarvestYieldOptions yieldOptions = ConfigureOptions.getInstance().getSowYieldScaling();
+        ConfigureOptions.CropYieldOptions yieldOptions = ConfigureOptions.getInstance().getCropYieldScaling();
         LinearScalingFunction baseYieldFunction = LinearScalingFunction.make(yieldOptions.getMinimumSkill(),
                 yieldOptions.getMaximumSkill(), yieldOptions.getMinimumBaseYield(), yieldOptions.getMaximumBaseYield());
         double modifiedSkill = this.performer.getSkills().getSkillOrLearn(SkillList.FARMING).
